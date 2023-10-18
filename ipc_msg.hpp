@@ -16,88 +16,49 @@
 
 #pragma once
 
-#include <atomic>
 #include <cstdint>
-#include <functional>
-#include <memory>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 
 namespace dmitigr::winbase::ipc::msg {
 
 /// A message.
 class Message {
 public:
+  /// A serialized message.
+  struct Serialized final {
+    std::int16_t format{};
+    std::string bytes;
+  };
+
   /// The destructor.
   virtual ~Message() = default;
 
-  /// @returns A string (or bytes) representation of message.
-  virtual std::string to_string() const = 0;
-
-  /// @returns A message format code.
-  virtual int format() const noexcept = 0;
-
-  /// The default constructor.
-  Message() = default;
-
-  /// The constructor.
-  explicit Message(const std::int64_t id)
-    : id_{id}
-  {}
-
   /// @returns The message identifier.
-  std::int64_t id() const noexcept
-  {
-    return id_;
-  }
+  virtual std::int64_t id() const noexcept = 0;
 
-private:
-  std::int64_t id_{};
+  /// @returns A message serialization.
+  virtual Serialized to_serialized() const = 0;
 };
 
 /// A response message.
-class Response : public Message {
-protected:
-  using Message::Message;
-};
+class Response : public Message {};
 
 /// An error response message.
 class Error : public Response, public std::runtime_error {
 public:
-  /// The default constructor.
-  Error() = default;
-
-  /// The constructor.
-  Error(const std::int64_t id, const int code, const std::string& message)
-    : Response{id}
-    , std::runtime_error{message}
-    , code_{code}
+  explicit Error(const std::string& what)
+    : std::runtime_error{what}
   {}
 
   /// @returns The error code.
-  int code() const noexcept
-  {
-    return code_;
-  }
+  virtual int code() const noexcept = 0;
 
   /// Throws this instance.
   virtual void throw_this() const = 0;
-
-private:
-  int code_{};
 };
 
 /// A request message.
-class Request : public Message {
-public:
-  /// The default constructor.
-  Request()
-    : Message{seq_++}
-  {}
-
-private:
-  inline static std::atomic_int64_t seq_{1};
-};
+class Request : public Message {};
 
 } // namespace dmitigr::winbase::ipc::msg

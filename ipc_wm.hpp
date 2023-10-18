@@ -284,14 +284,14 @@ private:
 
   void send__(const HWND recipient, const msg::Message& message)
   {
-    if (!recipient)
+    if (!window_)
       throw std::runtime_error{"cannot send message: ipc::wm::Messenger not running"};
     else if (!message.id())
       throw std::runtime_error{"cannot send message: invalid message identifier"};
 
-    auto data = message.to_string();
+    auto [fmt, data] = message.to_serialized();
     COPYDATASTRUCT cds{};
-    cds.dwData = static_cast<ULONG_PTR>(message.format());
+    cds.dwData = static_cast<ULONG_PTR>(fmt);
     cds.cbData = static_cast<DWORD>(data.size());
     cds.lpData = static_cast<PVOID>(data.data());
     SendMessage(recipient, WM_COPYDATA,
