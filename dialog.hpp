@@ -45,4 +45,11 @@ inline std::wstring dialog_item_text(const HWND dlg, const int item_id,
   return result;
 }
 
+inline void set_dialog_item_text(const HWND dlg, const int item_id,
+  const std::wstring& value)
+{
+  if (!SetDlgItemTextW(dlg, item_id, value.c_str()))
+    throw std::runtime_error{last_error_message()};
+}
+
 } // namespace dmitigr::winbase
