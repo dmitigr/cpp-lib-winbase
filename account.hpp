@@ -39,7 +39,7 @@ inline Account lookup_account(const PSID sid, const std::wstring& system_name = 
   LookupAccountSidW(system, sid,
     nullptr, &name_size, nullptr, &domain_size, nullptr);
   if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-    throw std::runtime_error{win::last_error_message()};
+    throw std::runtime_error{last_error_message()};
 
   Account result;
   result.name.resize(name_size - 1);
@@ -47,7 +47,7 @@ inline Account lookup_account(const PSID sid, const std::wstring& system_name = 
   if (!LookupAccountSidW(system, sid,
       result.name.data(), &name_size,
       result.domain.data(), &domain_size, &result.type))
-    throw std::runtime_error{win::last_error_message()};
+    throw std::runtime_error{last_error_message()};
 
   return result;
 }
