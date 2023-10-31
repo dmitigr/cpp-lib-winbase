@@ -221,4 +221,12 @@ adjust_token_privileges(const HANDLE token,
   return std::make_pair(std::move(prev_state), GetLastError());
 }
 
+/// @overload
+inline void set_token_information(const HANDLE token,
+  const TOKEN_INFORMATION_CLASS type, DWORD value)
+{
+  if (!SetTokenInformation(token, type, &value, sizeof(value)))
+    throw std::runtime_error{last_error_message()};
+}
+
 } // namespace dmitigr::winbase
