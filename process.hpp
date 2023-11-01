@@ -16,18 +16,87 @@
 
 #pragma once
 
+#include "../base/noncopymove.hpp"
 #include "error.hpp"
 #include "hguard.hpp"
 #include "windows.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <psapi.h>
 
 namespace dmitigr::winbase {
+
+/// A wrapper around PROCESS_INFORMATION.
+class Process_info final : private Noncopy {
+public:
+  ~Process_info()
+  {
+    CloseHandle(info_.hThread);
+    info_.hThread = INVALID_HANDLE_VALUE;
+    CloseHandle(info_.hProcess);
+    info_.hProcess = INVALID_HANDLE_VALUE;
+  }
+
+  Process_info() = default;
+
+  Process_info(PROCESS_INFORMATION&& pi) noexcept
+    : info_{std::move(pi)}
+  {
+    pi.hProcess = INVALID_HANDLE_VALUE;
+    pi.hThread = INVALID_HANDLE_VALUE;
+    pi.dwProcessId = -1;
+    pi.dwThreadId = -1;
+  }
+
+  Process_info(Process_info&& rhs) noexcept
+    : info_{std::move(rhs.info_)}
+  {}
+
+  Process_info& operator=(Process_info&& rhs) noexcept
+  {
+    Process_info tmp{std::move(rhs)};
+    swap(tmp);
+    return *this;
+  }
+
+  void swap(Process_info& rhs) noexcept
+  {
+    using std::swap;
+    swap(info_, rhs.info_);
+  }
+
+  const PROCESS_INFORMATION* ptr() const noexcept
+  {
+    return &info_;
+  }
+
+  PROCESS_INFORMATION* ptr() noexcept
+  {
+    return const_cast<PROCESS_INFORMATION*>(
+      static_cast<const Process_info*>(this)->ptr());
+  }
+
+  const PROCESS_INFORMATION& ref() const noexcept
+  {
+    return info_;
+  }
+
+  PROCESS_INFORMATION& ref() noexcept
+  {
+    return const_cast<PROCESS_INFORMATION&>(
+      static_cast<const Process_info*>(this)->ref());
+  }
+
+private:
+  PROCESS_INFORMATION info_{INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE,
+      static_cast<DWORD>(-1), static_cast<DWORD>(-1)};
+};
 
 /// @returns A handle to an opened process.
 inline Handle_guard open_process(const DWORD desired_access,
