@@ -194,4 +194,13 @@ inline std::vector<DWORD> enum_processes()
   return result;
 }
 
+/// @returns The termination status of the specified process.
+inline DWORD exit_code_process(const HANDLE handle)
+{
+  DWORD result{};
+  if (!GetExitCodeProcess(handle, &result))
+    throw std::runtime_error{last_error_message()};
+  return result;
+}
+
 } // namespace dmitigr::winbase
