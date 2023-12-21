@@ -19,6 +19,7 @@
 #include "../base/noncopymove.hpp"
 #include "error.hpp"
 #include "hguard.hpp"
+#include "sync.hpp"
 #include "windows.hpp"
 
 #include <algorithm>
@@ -201,6 +202,18 @@ inline DWORD exit_code_process(const HANDLE handle)
   if (!GetExitCodeProcess(handle, &result))
     throw std::runtime_error{last_error_message()};
   return result;
+}
+
+/// @returns The termination status of the specified process which terminated.
+inline DWORD wait_for_exit(const HANDLE process,
+  const std::chrono::milliseconds timeout = std::chrono::milliseconds::max())
+{
+  const auto status = wait_for_single_object(process, timeout);
+  if (status == WAIT_TIMEOUT)
+    throw std::runtime_error{"process wait timeout"};
+  else if (status != WAIT_OBJECT_0)
+    throw std::runtime_error{"process wait error "+std::to_string(status)};
+  return exit_code_process(process);
 }
 
 } // namespace dmitigr::winbase
