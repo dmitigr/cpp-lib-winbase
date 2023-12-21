@@ -99,10 +99,10 @@ private:
 };
 
 /// @returns A handle to an opened process.
-inline Handle_guard open_process(const DWORD desired_access,
-  const bool inherit_handle, const DWORD pid)
+inline Handle_guard open_process(const DWORD pid,
+  const DWORD desired_access, const bool inherit_handle)
 {
-  HANDLE result{OpenProcess(desired_access, false, pid)};
+  HANDLE result{OpenProcess(desired_access, inherit_handle, pid)};
   if (result == NULL)
     throw std::runtime_error{last_error_message()};
   return Handle_guard{result};
