@@ -74,6 +74,12 @@ public:
     return handle();
   }
 
+  /// @returns `true` if the guarded HANDLE is valid.
+  explicit operator bool() const noexcept
+  {
+    return handle_ != INVALID_HANDLE_VALUE;
+  }
+
   /// @returns The error code.
   DWORD close() noexcept
   {
