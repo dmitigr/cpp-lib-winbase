@@ -41,8 +41,10 @@ public:
   {
     DWORD sz{};
     GetTokenInformation(token, type, nullptr, 0, &sz);
-    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-      throw std::runtime_error{last_error_message()};
+    if (!(sz > 0)) {
+      if (const auto err = GetLastError())
+        throw std::runtime_error{system_message(err)};
+    }
 
     buf_.resize(sz);
     if (!GetTokenInformation(token, type, buf_.data(), buf_.size(), &sz))
