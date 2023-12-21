@@ -70,6 +70,21 @@ public:
     return const_cast<T&>(static_cast<const Token_info*>(this)->data<T>());
   }
 
+  const void* bytes() const noexcept
+  {
+    return buf_.data();
+  }
+
+  void* bytes() noexcept
+  {
+    return const_cast<void*>(static_cast<const Token_info*>(this)->bytes());
+  }
+
+  std::size_t size() const noexcept
+  {
+    return buf_.size();
+  }
+
 private:
   TOKEN_INFORMATION_CLASS type_{};
   std::vector<char> buf_;
