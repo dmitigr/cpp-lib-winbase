@@ -238,6 +238,14 @@ adjust_token_privileges(const HANDLE token,
   return std::make_pair(std::move(prev_state), GetLastError());
 }
 
+/// Sets an `info` for a specified access `token`.
+inline void set_token_information(const HANDLE token, const Token_info& info)
+{
+  if (!SetTokenInformation(token, info.type(),
+      const_cast<void*>(info.bytes()), info.size()))
+    throw std::runtime_error{last_error_message()};
+}
+
 /// @overload
 inline void set_token_information(const HANDLE token,
   const TOKEN_INFORMATION_CLASS type, DWORD value)
