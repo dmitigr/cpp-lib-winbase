@@ -146,7 +146,7 @@ inline std::filesystem::path module_filename(const HMODULE module = {})
  *
  * @param flags A value of `0` means Win32 path format.
  */
-inline std::filesystem::path query_full_process_image_name(const HANDLE process,
+inline std::wstring query_full_process_image_name(const HANDLE process,
   const DWORD flags = 0)
 {
   constexpr const std::size_t sz_inc{259};
@@ -167,7 +167,7 @@ inline std::filesystem::path query_full_process_image_name(const HANDLE process,
 }
 
 /// @overload
-inline std::filesystem::path query_full_process_image_name(const DWORD process_id,
+inline std::wstring query_full_process_image_name(const DWORD process_id,
   const DWORD flags = 0)
 {
   const auto process = open_process(PROCESS_QUERY_LIMITED_INFORMATION,
