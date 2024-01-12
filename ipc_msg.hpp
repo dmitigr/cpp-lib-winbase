@@ -18,7 +18,6 @@
 
 #include <cstdint>
 #include <string>
-#include <system_error>
 
 namespace dmitigr::winbase::ipc::msg {
 
@@ -47,12 +46,6 @@ class Response : public Message {};
 /// An error response message.
 class Error : public Response {
 public:
-  /// @returns The error code.
-  virtual std::error_code code() const noexcept = 0;
-
-  /// @returns The what-string.
-  virtual const char* what() const noexcept = 0;
-
   /// Throws exception by using this instance.
   [[noreturn]] virtual void throw_from_this() const = 0;
 };
