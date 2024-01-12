@@ -99,7 +99,7 @@ inline Hkey_guard open_key(const HKEY key, LPCWSTR const subkey, const REGSAM ma
   if (err == ERROR_FILE_NOT_FOUND)
     return Hkey_guard{};
   else if (err != ERROR_SUCCESS)
-    throw Sys_exception{err, "cannot open registry key"};
+    throw Sys_exception{static_cast<DWORD>(err), "cannot open registry key"};
   return Hkey_guard{result};
 }
 
@@ -121,7 +121,7 @@ create_key(const HKEY key, LPCWSTR const subkey,
     &res_key,
     &res_disp);
   if (err != ERROR_SUCCESS)
-    throw Sys_exception{err, "cannot create registry key"};
+    throw Sys_exception{static_cast<DWORD>(err), "cannot create registry key"};
   return std::make_pair(Hkey_guard{res_key}, res_disp);
 }
 
@@ -130,7 +130,7 @@ inline void set_value(const HKEY key, LPCWSTR const name, const DWORD type,
 {
   const auto err = RegSetValueExW(key, name, 0, type, data, size);
   if (err != ERROR_SUCCESS)
-    throw Sys_exception{err, "cannot set value of registry key"};
+    throw Sys_exception{static_cast<DWORD>(err), "cannot set value of registry key"};
 }
 
 template<typename T>
@@ -147,7 +147,7 @@ inline void remove_value(const HKEY key,
 {
   const auto err = RegDeleteKeyValueW(key, subkey, value);
   if (err != ERROR_FILE_NOT_FOUND && err != ERROR_SUCCESS)
-    throw Sys_exception{err, "cannot remove value of registry key"};
+    throw Sys_exception{static_cast<DWORD>(err), "cannot remove value of registry key"};
 }
 
 template<typename T>
@@ -168,7 +168,7 @@ std::optional<T> value(const HKEY key, LPCWSTR const subkey, LPCWSTR const name)
     else if (err == ERROR_SUCCESS)
       return result;
     else
-      throw Sys_exception{err, "cannot get value of registry key"};
+      throw Sys_exception{static_cast<DWORD>(err), "cannot get value of registry key"};
   } else
     static_assert(detail::false_value<T>, "unsupported type specified");
 }

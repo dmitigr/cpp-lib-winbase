@@ -17,7 +17,6 @@
 #ifndef DMITIGR_WINBASE_EXCEPTIONS_HPP
 #define DMITIGR_WINBASE_EXCEPTIONS_HPP
 
-#include "../base/exceptions.hpp"
 #include "windows.hpp"
 
 #include <string>
@@ -25,46 +24,22 @@
 
 namespace dmitigr::winbase {
 
-// -----------------------------------------------------------------------------
-// Exception
-// -----------------------------------------------------------------------------
-
-/**
- * @ingroup errors
- *
- * @brief The generic exception class.
- */
-class Exception : public dmitigr::Exception {
-  using dmitigr::Exception::Exception;
-};
-
-// -----------------------------------------------------------------------------
-// Sys_exception
-// -----------------------------------------------------------------------------
-
 /**
  * @ingroup errors
  *
  * @brief An exception thrown on system error.
  */
-class Sys_exception final : public Exception {
+class Sys_exception final : public std::system_error {
 public:
   /// The constructor.
   Sys_exception(const DWORD ev, const std::string& what)
-    : Exception{std::system_category()
-        .default_error_condition(static_cast<int>(ev)), what}
-  {}
-
-  /// @overload
-  Sys_exception(const LSTATUS ev, const std::string& what)
-    : Sys_exception{static_cast<DWORD>(ev), what}
+    : system_error{static_cast<int>(ev), std::system_category()}
   {}
 
   /// @overload
   explicit Sys_exception(const std::string& what)
     : Sys_exception{GetLastError(), what}
   {}
-
 };
 
 } // namespace dmitigr::winbase
