@@ -17,8 +17,8 @@
 #pragma once
 
 #include <cstdint>
-#include <stdexcept>
 #include <string>
+#include <system_error>
 
 namespace dmitigr::winbase::ipc::msg {
 
@@ -45,17 +45,16 @@ public:
 class Response : public Message {};
 
 /// An error response message.
-class Error : public Response, public std::runtime_error {
+class Error : public Response {
 public:
-  explicit Error(const std::string& what)
-    : std::runtime_error{what}
-  {}
-
   /// @returns The error code.
-  virtual int code() const noexcept = 0;
+  virtual std::error_code code() const noexcept = 0;
 
-  /// Throws this instance.
-  virtual void throw_this() const = 0;
+  /// @returns The what-string.
+  virtual const char* what() const noexcept = 0;
+
+  /// Throws exception by using this instance.
+  [[noreturn]] virtual void throw_from_this() const = 0;
 };
 
 /// A request message.
