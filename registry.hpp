@@ -141,6 +141,10 @@ void set_value(const HKEY key, LPCWSTR const name, const T& value)
   } else if constexpr (std::is_same_v<T, LPCWSTR>) {
     const auto* const bytes = reinterpret_cast<const BYTE*>(value);
     set_value(key, name, REG_SZ, bytes, sizeof(*value)*(lstrlenW(value) + 1));
+  } else if constexpr (std::is_same_v<T, std::wstring>) {
+    const auto* const bytes = reinterpret_cast<const BYTE*>(value.c_str());
+    set_value(key, name, REG_SZ, bytes,
+      sizeof(std::wstring::value_type)*(value.size() + 1));
   } else
     static_assert(detail::false_value<T>, "unsupported type specified");
 }
