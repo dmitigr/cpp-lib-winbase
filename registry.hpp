@@ -126,7 +126,7 @@ create_key(const HKEY key, LPCWSTR const subkey,
 }
 
 inline void set_value(const HKEY key, LPCWSTR const name, const DWORD type,
-  const BYTE* data, const DWORD size)
+  const BYTE* const data, const DWORD size)
 {
   const auto err = RegSetValueExW(key, name, 0, type, data, size);
   if (err != ERROR_SUCCESS)
@@ -138,6 +138,9 @@ void set_value(const HKEY key, LPCWSTR const name, const T& value)
 {
   if constexpr (std::is_same_v<T, DWORD>) {
     set_value(key, name, REG_DWORD, reinterpret_cast<const BYTE*>(&value), sizeof(T));
+  } else if constexpr (std::is_same_v<T, LPCWSTR>) {
+    const auto* const bytes = reinterpret_cast<const BYTE*>(value);
+    set_value(key, name, REG_SZ, bytes, sizeof(*value)*(lstrlenW(value) + 1));
   } else
     static_assert(detail::false_value<T>, "unsupported type specified");
 }
