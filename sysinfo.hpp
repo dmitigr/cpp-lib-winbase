@@ -18,12 +18,37 @@
 #pragma comment(lib, "kernel32")
 
 #include "error.hpp"
+#include "exceptions.hpp"
 
 #include <cassert>
 #include <filesystem>
 #include <stdexcept>
+#include <vector>
 
 namespace dmitigr::winbase {
+
+class Smbios_firmware_table final {
+public:
+  Smbios_firmware_table() = default;
+
+  static Smbios_firmware_table from_system()
+  {
+    Smbios_firmware_table result;
+    auto& rd = result.data_;
+    rd.resize(GetSystemFirmwareTable('RSMB', 0, nullptr, 0));
+    if (!rd.empty() && GetSystemFirmwareTable('RSMB', 0, rd.data(), rd.size()))
+      return result;
+    throw Sys_exception{"cannot get SMBIOS firmware table"};
+  }
+
+  const std::vector<char>& raw() const noexcept
+  {
+    return data_;
+  }
+
+private:
+  std::vector<char> data_;
+};
 
 inline std::filesystem::path system_directory()
 {
