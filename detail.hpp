@@ -14,8 +14,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <array>
+#include <type_traits>
+
 namespace dmitigr::winbase::detail {
 
 template<typename> constexpr bool false_value{};
+
+template<class T>
+struct Is_std_array : std::false_type {};
+
+template<class T, auto N>
+struct Is_std_array<std::array<T, N>> : std::true_type {};
 
 } // namespace dmitigr::winbase::detail
