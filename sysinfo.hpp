@@ -27,6 +27,7 @@
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -62,10 +63,17 @@ public:
 
   struct Sys_info final : Structure {
     std::string manufacturer;
-    std::string product_name;
+    std::string product;
     std::string version;
     std::string serial_number;
     rnd::Uuid uuid{};
+  };
+
+  struct Baseboard_info final : Structure {
+    std::string manufacturer;
+    std::string product;
+    std::string version;
+    std::string serial_number;
   };
 
   Smbios_firmware_table(const BYTE* const data, const std::size_t size)
@@ -113,10 +121,23 @@ public:
     const auto* const s = structure(1);
     auto result = make_structure<Sys_info>(*s);
     result.manufacturer = field<std::string>(s, 0x4);
-    result.product_name = field<std::string>(s, 0x5);
+    result.product = field<std::string>(s, 0x5);
     result.version = field<std::string>(s, 0x6);
     result.serial_number = field<std::string>(s, 0x7);
     result.uuid = field<std::array<BYTE, 16>>(s, 0x8);
+    return result;
+  }
+
+  std::optional<Baseboard_info> baseboard_info() const
+  {
+    const auto* const s = structure(2, true);
+    if (!s)
+      return std::nullopt;
+    auto result = make_structure<Baseboard_info>(*s);
+    result.manufacturer = field<std::string>(s, 0x4);
+    result.product = field<std::string>(s, 0x5);
+    result.version = field<std::string>(s, 0x6);
+    result.serial_number = field<std::string>(s, 0x7);
     return result;
   }
 
@@ -136,14 +157,18 @@ private:
     return result;
   }
 
-  const Structure* structure(const BYTE type) const
+  const Structure* structure(const BYTE type,
+    const bool no_throw_if_not_found = false) const
   {
     for (auto* s = first_structure(); s; s = next_structure(s)) {
       if (s->type == type)
         return s;
     }
-    throw std::runtime_error{"no BIOS information structure of type "
-      +std::to_string(type)+" found in SMBIOS"};
+    if (no_throw_if_not_found)
+      return nullptr;
+    else
+      throw std::runtime_error{"no BIOS information structure of type "
+        +std::to_string(type)+" found in SMBIOS"};
   }
 
   static const char* unformed_section(const Structure* const s) noexcept
