@@ -37,3 +37,9 @@ set(dmitigr_winbase_headers
   strconv.hpp
   windows.hpp
 )
+
+# ------------------------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------------------------
+
+set(dmitigr_libs_winbase_deps base rnd)
