@@ -223,7 +223,7 @@ inline std::filesystem::path system_directory()
   const auto sz = GetSystemDirectoryW(result.data(), result.size() + 1);
   if (!sz)
     throw std::runtime_error{last_error_message()};
-  assert(sz == size_with_null - 1);
+  DMITIGR_ASSERT(sz == size_with_null - 1);
   return result;
 }
 
