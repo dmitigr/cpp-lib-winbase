@@ -33,7 +33,7 @@ template<class Info>
 using Workstation_info = std::unique_ptr<Info, NET_API_STATUS(*)(LPVOID)>;
 
 template<class Info>
-Workstation_info<Info> workstation_info(const LMSTR server_name)
+Workstation_info<Info> workstation_info(const LMSTR server_name = {})
 {
   using I = std::decay_t<Info>;
   constexpr DWORD level = []
