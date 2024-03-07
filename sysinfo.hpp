@@ -252,6 +252,19 @@ inline std::filesystem::path system_directory()
   return result;
 }
 
+inline std::wstring computer_name(const COMPUTER_NAME_FORMAT type)
+{
+  DWORD sz{};
+  GetComputerNameExW(type, nullptr, &sz);
+  if (const auto e = GetLastError(); e != ERROR_MORE_DATA)
+    throw Sys_exception{e, "cannot get required size of computer name of type "
+      +std::to_string(type)};
+  std::wstring result(sz, L'\0');
+  if (!GetComputerNameExW(type, result.data(), &sz))
+    throw Sys_exception{"cannot get computer name of type "+std::to_string(type)};
+  return result;
+}
+
 inline std::string cpu_architecture_string(const WORD value)
 {
   switch (value) {
