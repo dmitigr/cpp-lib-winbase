@@ -17,9 +17,12 @@
 #include <array>
 #include <type_traits>
 
+#pragma once
+
 namespace dmitigr::winbase::detail {
 
-template<typename> constexpr bool false_value{};
+template<typename>
+constexpr bool false_value{};
 
 template<class T>
 struct Is_std_array : std::false_type {};
