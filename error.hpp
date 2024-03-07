@@ -25,6 +25,12 @@
 
 namespace dmitigr::winbase {
 
+/// @returns The calling thread's last-error code value.
+inline DWORD last_error() noexcept
+{
+  return GetLastError();
+}
+
 /// @returns A human-readable system message in UTF-16.
 inline std::wstring system_message_w(const DWORD message_id)
 {

@@ -38,6 +38,7 @@
 
 namespace dmitigr::winbase {
 
+DWORD last_error() noexcept;
 std::wstring system_message_w(DWORD);
 std::string system_message(DWORD);
 std::wstring last_error_message_w();
