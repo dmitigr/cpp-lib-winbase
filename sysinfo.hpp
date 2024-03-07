@@ -265,6 +265,11 @@ inline std::wstring computer_name(const COMPUTER_NAME_FORMAT type)
   return result;
 }
 
+/**
+ * @returns The string representation of a `value`.
+ *
+ * @remarks The `value` can be retrieved by calling GetSystemInfo().
+ */
 inline std::string cpu_architecture_string(const WORD value)
 {
   switch (value) {
