@@ -252,4 +252,24 @@ inline std::filesystem::path system_directory()
   return result;
 }
 
+inline std::string cpu_architecture_string(const WORD value)
+{
+  switch (value) {
+  case PROCESSOR_ARCHITECTURE_AMD64:
+    return "x64";
+  case PROCESSOR_ARCHITECTURE_ARM:
+    return "arm";
+  case PROCESSOR_ARCHITECTURE_ARM64:
+    return "arm64";
+  case PROCESSOR_ARCHITECTURE_IA64:
+    return "ia64";
+  case PROCESSOR_ARCHITECTURE_INTEL:
+    return "x86";
+  case PROCESSOR_ARCHITECTURE_UNKNOWN:
+    [[fallthrough]];
+  default:
+    return "unknown";
+  }
+}
+
 } // namespace dmitigr::winbase
