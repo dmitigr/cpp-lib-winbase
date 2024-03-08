@@ -117,8 +117,9 @@ inline std::string physical_address_string(const IP_ADAPTER_ADDRESSES& iaa,
     const int count = std::sprintf(res, "%02x", iaa.PhysicalAddress[i]);
     DMITIGR_ASSERT(count == 2);
     if (i + 1 < iaa.PhysicalAddressLength) {
-      DMITIGR_ASSERT(res - result.data() + 2 + separator.size() <= result.size());
-      std::strncpy(res + 2, separator.data(), separator.size());
+      DMITIGR_ASSERT(res - result.data() +
+        count + separator.size() <= result.size());
+      std::strncpy(res + count, separator.data(), separator.size());
     }
   }
   return result;
