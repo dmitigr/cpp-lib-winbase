@@ -32,7 +32,7 @@
 #include <winsock2.h>
 #include <iphlpapi.h>
 
-namespace dmitigr::winbase::iphelp {
+namespace dmitigr::winbase::iphelper {
 
 /// A wrapper around IP_ADAPTER_ADDRESSES.
 class Ip_adapter_addresses final {
@@ -124,4 +124,4 @@ inline std::string physical_address_string(const IP_ADAPTER_ADDRESSES& iaa,
   return result;
 }
 
-} // namespace dmitigr::winbase::iphelp
+} // namespace dmitigr::winbase::iphelper
