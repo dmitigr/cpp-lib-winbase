@@ -42,4 +42,4 @@ set(dmitigr_winbase_headers
 # Dependencies
 # ------------------------------------------------------------------------------
 
-set(dmitigr_libs_winbase_deps base rnd)
+set(dmitigr_libs_winbase_deps base rnd str)

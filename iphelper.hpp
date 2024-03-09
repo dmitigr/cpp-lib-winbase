@@ -20,6 +20,7 @@
 #pragma comment(lib, "iphlpapi")
 
 #include "../base/assert.hpp"
+#include "../str/transform.hpp"
 #include "exceptions.hpp"
 
 #include <cstdio>
@@ -99,30 +100,9 @@ private:
 inline std::string physical_address_string(const IP_ADAPTER_ADDRESSES& iaa,
   const std::string_view separator = "-")
 {
-  if (!separator.data())
-    throw std::invalid_argument{"cannot generate textual representation of"
-      " network adapter physical address: invalid separator"};
-
-  if (iaa.PhysicalAddressLength <= 0)
-    return std::string{};
-
-  std::string result;
-  result.resize(
-    iaa.PhysicalAddressLength*2 + // for bytes in HEX
-    (iaa.PhysicalAddressLength - 1)*separator.size() // for separators
-                );
-  for (ULONG i{}; i < iaa.PhysicalAddressLength; ++i) {
-    const auto res = result.data() + 2*i + separator.size()*i;
-    DMITIGR_ASSERT(res - result.data() + 2 <= result.size());
-    const int count = std::sprintf(res, "%02x", iaa.PhysicalAddress[i]);
-    DMITIGR_ASSERT(count == 2);
-    if (i + 1 < iaa.PhysicalAddressLength) {
-      DMITIGR_ASSERT(res - result.data() +
-        count + separator.size() <= result.size());
-      std::strncpy(res + count, separator.data(), separator.size());
-    }
-  }
-  return result;
+  return dmitigr::str::to_string(std::string_view{
+    reinterpret_cast<const char*>(iaa.PhysicalAddress),
+    iaa.PhysicalAddressLength}, dmitigr::str::Byte_format::hex, separator);
 }
 
 } // namespace dmitigr::winbase::iphelper
