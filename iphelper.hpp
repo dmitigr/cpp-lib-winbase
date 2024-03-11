@@ -98,11 +98,11 @@ private:
  * string if `!iaa.PhysicalAddressLength`.
  */
 inline std::string physical_address_string(const IP_ADAPTER_ADDRESSES& iaa,
-  const std::string_view separator = "-")
+  const std::string_view delimiter = "-")
 {
-  return dmitigr::str::to_string(std::string_view{
+  return dmitigr::str::sparsed_string(std::string_view{
     reinterpret_cast<const char*>(iaa.PhysicalAddress),
-    iaa.PhysicalAddressLength}, dmitigr::str::Byte_format::hex, separator);
+    iaa.PhysicalAddressLength}, dmitigr::str::Byte_format::hex, delimiter);
 }
 
 } // namespace dmitigr::winbase::iphelper
