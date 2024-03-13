@@ -212,7 +212,7 @@ private:
       const int idx = *ptr;
       if (!idx)
         throw std::runtime_error{"cannot get string of structure "
-          +std::string{static_cast<int>(s->type)}+" at offset "
+          +std::to_string(static_cast<int>(s->type))+" at offset "
           +std::to_string(offset)+": string field references no string"};
       const char* str = unformed_section(s);
       for (int i{1}; i < idx; ++i) {
