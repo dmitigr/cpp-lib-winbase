@@ -170,8 +170,7 @@ inline std::wstring query_full_process_image_name(const HANDLE process,
 inline std::wstring query_full_process_image_name(const DWORD process_id,
   const DWORD flags = 0)
 {
-  const auto process = open_process(PROCESS_QUERY_LIMITED_INFORMATION,
-    false, process_id);
+  const auto process = open_process(process_id, PROCESS_QUERY_LIMITED_INFORMATION, false);
   return query_full_process_image_name(process, flags);
 }
 
