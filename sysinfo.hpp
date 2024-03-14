@@ -55,25 +55,25 @@ public:
   static_assert(std::is_standard_layout_v<Structure>);
 
   struct Bios_info final : Structure {
-    std::string vendor;
-    std::string version;
-    std::string release_date;
+    std::optional<std::string> vendor;
+    std::optional<std::string> version;
+    std::optional<std::string> release_date;
     BYTE rom_size{};
   };
 
   struct Sys_info final : Structure {
-    std::string manufacturer;
-    std::string product;
-    std::string version;
-    std::string serial_number;
+    std::optional<std::string> manufacturer;
+    std::optional<std::string> product;
+    std::optional<std::string> version;
+    std::optional<std::string> serial_number;
     rnd::Uuid uuid{};
   };
 
   struct Baseboard_info final : Structure {
-    std::string manufacturer;
-    std::string product;
-    std::string version;
-    std::string serial_number;
+    std::optional<std::string> manufacturer;
+    std::optional<std::string> product;
+    std::optional<std::string> version;
+    std::optional<std::string> serial_number;
   };
 
   Smbios_firmware_table(const BYTE* const data, const std::size_t size)
@@ -109,9 +109,9 @@ public:
   {
     const auto* const s = structure(0);
     auto result = make_structure<Bios_info>(*s);
-    result.vendor = field<std::string>(s, 0x4);
-    result.version = field<std::string>(s, 0x5);
-    result.release_date = field<std::string>(s, 0x8);
+    result.vendor = field<std::optional<std::string>>(s, 0x4);
+    result.version = field<std::optional<std::string>>(s, 0x5);
+    result.release_date = field<std::optional<std::string>>(s, 0x8);
     result.rom_size = field<BYTE>(s, 0x9);
     return result;
   }
@@ -120,10 +120,10 @@ public:
   {
     const auto* const s = structure(1);
     auto result = make_structure<Sys_info>(*s);
-    result.manufacturer = field<std::string>(s, 0x4);
-    result.product = field<std::string>(s, 0x5);
-    result.version = field<std::string>(s, 0x6);
-    result.serial_number = field<std::string>(s, 0x7);
+    result.manufacturer = field<std::optional<std::string>>(s, 0x4);
+    result.product = field<std::optional<std::string>>(s, 0x5);
+    result.version = field<std::optional<std::string>>(s, 0x6);
+    result.serial_number = field<std::optional<std::string>>(s, 0x7);
     result.uuid = field<std::array<BYTE, 16>>(s, 0x8);
     return result;
   }
@@ -134,10 +134,10 @@ public:
     if (!s)
       return std::nullopt;
     auto result = make_structure<Baseboard_info>(*s);
-    result.manufacturer = field<std::string>(s, 0x4);
-    result.product = field<std::string>(s, 0x5);
-    result.version = field<std::string>(s, 0x6);
-    result.serial_number = field<std::string>(s, 0x7);
+    result.manufacturer = field<std::optional<std::string>>(s, 0x4);
+    result.product = field<std::optional<std::string>>(s, 0x5);
+    result.version = field<std::optional<std::string>>(s, 0x6);
+    result.serial_number = field<std::optional<std::string>>(s, 0x7);
     return result;
   }
 
@@ -208,12 +208,10 @@ private:
     using Dt = std::decay_t<T>;
     using Qword = unsigned __int64;
     const BYTE* const ptr = reinterpret_cast<const BYTE*>(s) + offset;
-    if constexpr (std::is_same_v<Dt, std::string>) {
+    if constexpr (std::is_same_v<Dt, std::optional<std::string>>) {
       const int idx = *ptr;
       if (!idx)
-        throw std::runtime_error{"cannot get string of structure "
-          +std::to_string(static_cast<int>(s->type))+" at offset "
-          +std::to_string(offset)+": string field references no string"};
+        return std::nullopt;
       const char* str = unformed_section(s);
       for (int i{1}; i < idx; ++i) {
         std::string_view view{str};
