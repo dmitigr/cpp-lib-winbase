@@ -29,13 +29,34 @@ if (NOT WIN32)
 endif()
 
 set(dmitigr_winbase_headers
+  account.hpp
+  combase.hpp
+  detail.hpp
   dialog.hpp
   error.hpp
+  exceptions.hpp
+  hguard.hpp
   hlocal.hpp
+  ipc_msg.hpp
+  ipc_wm.hpp
+  iphelper.hpp
+  job.hpp
   menu.hpp
+  netman.hpp
+  processenv.hpp
+  process.hpp
+  program.hpp
+  registry.hpp
   resource.hpp
+  security.hpp
+  shell.hpp
   strconv.hpp
+  sync.hpp
+  sysinfo.hpp
+  userenv.hpp
   windows.hpp
+  winsta.hpp
+  wow64.hpp
 )
 
 # ------------------------------------------------------------------------------
