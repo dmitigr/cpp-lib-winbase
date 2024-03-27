@@ -125,6 +125,14 @@ create_key(const HKEY key, LPCWSTR const subkey,
   return std::make_pair(Hkey_guard{res_key}, res_disp);
 }
 
+/// @overload
+inline auto create_key(const HKEY key, const std::wstring& subkey,
+  const REGSAM mask, const LPSECURITY_ATTRIBUTES secattrs = {},
+  const DWORD options = 0)
+{
+  return create_key(key, subkey.c_str(), mask, secattrs, options);
+}
+
 inline void set_value(const HKEY key, LPCWSTR const name, const DWORD type,
   const BYTE* const data, const DWORD size)
 {
@@ -149,12 +157,42 @@ void set_value(const HKEY key, LPCWSTR const name, const T& value)
     static_assert(detail::false_value<T>, "unsupported type specified");
 }
 
-inline void remove_value(const HKEY key,
-  LPCWSTR const subkey = {}, LPCWSTR const value = {})
+/// @overload
+template<typename T>
+void set_value(const HKEY key, const std::wstring& name, const T& value)
 {
-  const auto err = RegDeleteKeyValueW(key, subkey, value);
+  set_value(key, name.c_str(), value);
+}
+
+inline void remove_value(const HKEY key,
+  LPCWSTR const subkey = {}, LPCWSTR const value_name = {})
+{
+  const auto err = RegDeleteKeyValueW(key, subkey, value_name);
   if (err != ERROR_FILE_NOT_FOUND && err != ERROR_SUCCESS)
-    throw Sys_exception{static_cast<DWORD>(err), "cannot remove value of registry key"};
+    throw Sys_exception{static_cast<DWORD>(err),
+      "cannot remove value of registry key"};
+}
+
+/// @overload
+inline void remove_value(const HKEY key, const std::wstring& subkey = {},
+  const std::wstring& value_name = {})
+{
+  LPCWSTR subkey_str{!subkey.empty() ? subkey.c_str() : nullptr};
+  LPCWSTR value_name_str{!value_name.empty() ? value_name.c_str() : nullptr};
+  remove_value(key, subkey_str, value_name_str);
+}
+
+inline void remove_key(const HKEY key, LPCWSTR subkey)
+{
+  if (const auto err = RegDeleteKeyW(key, subkey); err != ERROR_SUCCESS)
+    throw Sys_exception{static_cast<DWORD>(err),
+      "cannot remove registry key"};
+}
+
+/// @overload
+inline void remove_key(const HKEY key, const std::wstring& subkey)
+{
+  remove_key(key, subkey.c_str());
 }
 
 template<typename T>
