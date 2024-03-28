@@ -33,7 +33,7 @@ class Sys_exception final : public std::system_error {
 public:
   /// The constructor.
   Sys_exception(const DWORD ev, const std::string& what)
-    : system_error{static_cast<int>(ev), std::system_category()}
+    : system_error{static_cast<int>(ev), std::system_category(), what}
   {}
 
   /// @overload
