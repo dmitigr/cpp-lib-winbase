@@ -27,7 +27,8 @@
 namespace dmitigr::winbase {
 
 /// @returns The result of conversion UTF-8 string to UTF-16 wide string.
-inline std::wstring utf8_to_utf16(const std::string_view utf8)
+inline std::wstring utf8_to_utf16(const std::string_view utf8,
+                                  const UINT code_page = CP_UTF8)
 {
   if (utf8.empty())
     return std::wstring{};
@@ -40,14 +41,14 @@ inline std::wstring utf8_to_utf16(const std::string_view utf8)
   if (utf8.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
     throw_error();
 
-  const int result_size = MultiByteToWideChar(CP_UTF8, 0,
+  const int result_size = MultiByteToWideChar(code_page, 0,
     utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
   if (!result_size)
     throw_error();
 
   std::wstring result;
   result.resize(result_size);
-  const int rs = MultiByteToWideChar(CP_UTF8, 0,
+  const int rs = MultiByteToWideChar(code_page, 0,
     utf8.data(), static_cast<int>(utf8.size()),
     result.data(), static_cast<int>(result.size()));
   if (!rs)
@@ -59,7 +60,8 @@ inline std::wstring utf8_to_utf16(const std::string_view utf8)
 }
 
 /// @returns The result of conversion UTF-16 wide-string to UTF-8 string.
-inline std::string utf16_to_utf8(const std::wstring_view utf16)
+inline std::string utf16_to_utf8(const std::wstring_view utf16,
+  const UINT code_page = CP_UTF8)
 {
   if (utf16.empty())
     return std::string{};
@@ -72,14 +74,14 @@ inline std::string utf16_to_utf8(const std::wstring_view utf16)
   if (utf16.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
     throw_error();
 
-  const int result_size = WideCharToMultiByte(CP_UTF8, 0,
+  const int result_size = WideCharToMultiByte(code_page, 0,
     utf16.data(), static_cast<int>(utf16.size()), nullptr, 0, nullptr, nullptr);
   if (!result_size)
     throw_error();
 
   std::string result;
   result.resize(result_size);
-  const int rs = WideCharToMultiByte(CP_UTF8, 0,
+  const int rs = WideCharToMultiByte(code_page, 0,
     utf16.data(), static_cast<int>(utf16.size()),
     result.data(), static_cast<int>(result.size()),
     nullptr, nullptr);
