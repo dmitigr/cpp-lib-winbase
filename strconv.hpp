@@ -15,6 +15,8 @@
 // limitations under the License.
 
 #pragma once
+#pragma comment(lib, "kernel32")
+#pragma comment(lib, "user32")
 
 #include "windows.hpp"
 
@@ -28,7 +30,7 @@ namespace dmitigr::winbase {
 
 /// @returns The result of conversion UTF-8 string to UTF-16 wide string.
 inline std::wstring utf8_to_utf16(const std::string_view utf8,
-                                  const UINT code_page = CP_UTF8)
+  const UINT code_page = CP_UTF8)
 {
   if (utf8.empty())
     return std::wstring{};
@@ -91,6 +93,30 @@ inline std::string utf16_to_utf8(const std::wstring_view utf16,
   assert(result_size == rs);
 
   return result;
+}
+
+inline void upper_first_letter(std::wstring& str)
+{
+  if (!str.empty())
+    CharUpperBuffW(str.data(), 1);
+}
+
+inline void lower_first_letter(std::wstring& str)
+{
+  if (!str.empty())
+    CharLowerBuffW(str.data(), 1);
+}
+
+inline std::wstring&& upper_first_letter(std::wstring&& str)
+{
+  upper_first_letter(str);
+  return std::move(str);
+}
+
+inline std::wstring&& lower_first_letter(std::wstring&& str)
+{
+  lower_first_letter(str);
+  return std::move(str);
 }
 
 } // namespace dmitigr::winbase
