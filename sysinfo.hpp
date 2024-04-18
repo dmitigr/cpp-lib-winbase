@@ -25,6 +25,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <optional>
@@ -38,19 +39,24 @@ namespace dmitigr::winbase {
 
 class Smbios_firmware_table final {
 public:
+  using Byte = std::uint8_t;
+  using Word = std::uint16_t;
+  using Dword = std::uint32_t;
+  using Qword = std::uint64_t;
+
   struct Header final {
-    BYTE used_20_calling_method{};
-    BYTE major_version{};
-    BYTE minor_version{};
-    BYTE dmi_revision{};
-    DWORD length{};
+    Byte used_20_calling_method{};
+    Byte major_version{};
+    Byte minor_version{};
+    Byte dmi_revision{};
+    Dword length{};
   };
   static_assert(std::is_standard_layout_v<Header>);
 
   struct Structure {
-    BYTE type{};
-    BYTE length{};
-    WORD handle{};
+    Byte type{};
+    Byte length{};
+    Word handle{};
   };
   static_assert(std::is_standard_layout_v<Structure>);
 
@@ -58,7 +64,7 @@ public:
     std::optional<std::string> vendor;
     std::optional<std::string> version;
     std::optional<std::string> release_date;
-    BYTE rom_size{};
+    Byte rom_size{};
   };
 
   struct Sys_info final : Structure {
@@ -76,7 +82,7 @@ public:
     std::optional<std::string> serial_number;
   };
 
-  Smbios_firmware_table(const BYTE* const data, const std::size_t size)
+  Smbios_firmware_table(const Byte* const data, const std::size_t size)
     : data_(size)
   {
     if (size < sizeof(Header))
@@ -100,7 +106,7 @@ public:
     return *reinterpret_cast<const Header*>(data_.data());;
   }
 
-  const std::vector<BYTE>& raw() const noexcept
+  const std::vector<Byte>& raw() const noexcept
   {
     return data_;
   }
@@ -112,7 +118,7 @@ public:
     result.vendor = field<std::optional<std::string>>(s, 0x4);
     result.version = field<std::optional<std::string>>(s, 0x5);
     result.release_date = field<std::optional<std::string>>(s, 0x8);
-    result.rom_size = field<BYTE>(s, 0x9);
+    result.rom_size = field<Byte>(s, 0x9);
     return result;
   }
 
@@ -124,7 +130,7 @@ public:
     result.product = field<std::optional<std::string>>(s, 0x5);
     result.version = field<std::optional<std::string>>(s, 0x6);
     result.serial_number = field<std::optional<std::string>>(s, 0x7);
-    result.uuid = field<std::array<BYTE, 16>>(s, 0x8);
+    result.uuid = field<std::array<Byte, 16>>(s, 0x8);
     return result;
   }
 
@@ -142,7 +148,7 @@ public:
   }
 
 private:
-  std::vector<BYTE> data_;
+  std::vector<Byte> data_;
 
   Smbios_firmware_table() = default;
 
@@ -157,7 +163,7 @@ private:
     return result;
   }
 
-  const Structure* structure(const BYTE type,
+  const Structure* structure(const Byte type,
     const bool no_throw_if_not_found = false) const
   {
     for (auto* s = first_structure(); s; s = next_structure(s)) {
@@ -206,8 +212,7 @@ private:
   {
     DMITIGR_ASSERT(offset >= 0x0);
     using Dt = std::decay_t<T>;
-    using Qword = unsigned __int64;
-    const BYTE* const ptr = reinterpret_cast<const BYTE*>(s) + offset;
+    const Byte* const ptr = reinterpret_cast<const Byte*>(s) + offset;
     if constexpr (std::is_same_v<Dt, std::optional<std::string>>) {
       const int idx = *ptr;
       if (!idx)
@@ -221,15 +226,15 @@ private:
       return std::string{str};
     } else if constexpr (detail::Is_std_array<Dt>::value) {
       using V = typename Dt::value_type;
-      if constexpr (std::is_same_v<V, BYTE>) {
+      if constexpr (std::is_same_v<V, Byte>) {
         Dt result;
         std::memcpy(result.data(), ptr, result.size());
         return result;
       } else
         static_assert(detail::false_value<V>, "unsupported type");
     } else if constexpr (
-      std::is_same_v<Dt, BYTE>  || std::is_same_v<Dt, WORD> ||
-      std::is_same_v<Dt, DWORD> || std::is_same_v<Dt, Qword>) {
+      std::is_same_v<Dt, Byte>  || std::is_same_v<Dt, Word> ||
+      std::is_same_v<Dt, Dword> || std::is_same_v<Dt, Qword>) {
       return *reinterpret_cast<const Dt*>(ptr);
     } else
       static_assert(detail::false_value<T>, "unsupported type");
