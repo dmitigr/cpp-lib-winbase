@@ -19,7 +19,7 @@
 #pragma once
 #pragma comment(lib, "netapi32")
 
-#include "detail.hpp"
+#include "../base/traits.hpp"
 #include "exceptions.hpp"
 
 #include <memory>
@@ -45,7 +45,7 @@ Workstation_info<Info> workstation_info(const LMSTR server_name = {})
     } else if constexpr (std::is_same_v<I, WKSTA_INFO_102>) {
       return 102;
     } else
-      static_assert(detail::false_value<I>);
+      static_assert(false_value<I>);
   }();
 
   LPBYTE buf{};

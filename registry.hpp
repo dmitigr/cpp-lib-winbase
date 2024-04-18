@@ -18,7 +18,7 @@
 #pragma comment(lib, "advapi32")
 
 #include "../base/noncopymove.hpp"
-#include "detail.hpp"
+#include "../base/traits.hpp"
 #include "exceptions.hpp"
 
 #include <type_traits>
@@ -154,7 +154,7 @@ void set_value(const HKEY key, LPCWSTR const name, const T& value)
     set_value(key, name, REG_SZ, bytes,
       sizeof(std::wstring::value_type)*(value.size() + 1));
   } else
-    static_assert(detail::false_value<T>, "unsupported type specified");
+    static_assert(false_value<T>, "unsupported type specified");
 }
 
 /// @overload
@@ -215,7 +215,7 @@ std::optional<T> value(const HKEY key, LPCWSTR const subkey, LPCWSTR const name)
     else
       throw Sys_exception{static_cast<DWORD>(err), "cannot get value of registry key"};
   } else
-    static_assert(detail::false_value<T>, "unsupported type specified");
+    static_assert(false_value<T>, "unsupported type specified");
 }
 
 } // namespace dmitigr::winbase::registry

@@ -31,7 +31,6 @@ endif()
 set(dmitigr_winbase_headers
   account.hpp
   combase.hpp
-  detail.hpp
   dialog.hpp
   error.hpp
   exceptions.hpp

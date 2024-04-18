@@ -19,8 +19,8 @@
 #pragma once
 #pragma comment(lib, "shell32")
 
+#include "../base/traits.hpp"
 #include "combase.hpp"
-#include "detail.hpp"
 #include "exceptions.hpp"
 #include "hlocal.hpp"
 #include "strconv.hpp"
@@ -64,16 +64,16 @@ std::vector<String> argc_argv_to_vector(const int argc, const Ch* const* argv)
       else if constexpr (is_same_v<C, std::string::value_type>)
         result.emplace_back(argv[i]);
       else
-        static_assert(detail::false_value<C>, "unsupported type");
+        static_assert(false_value<C>, "unsupported type");
     } else if constexpr (std::is_same_v<S, std::wstring>) {
       if constexpr (is_same_v<C, std::string::value_type>)
         result.push_back(utf8_to_utf16(argv[i]));
       else if constexpr (is_same_v<C, std::wstring::value_type>)
         result.emplace_back(argv[i]);
       else
-        static_assert(detail::false_value<C>, "unsupported type");
+        static_assert(false_value<C>, "unsupported type");
     } else
-      static_assert(detail::false_value<S>, "unsupported type");
+      static_assert(false_value<S>, "unsupported type");
   }
   return result;
 }

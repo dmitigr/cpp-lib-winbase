@@ -18,8 +18,8 @@
 #pragma comment(lib, "kernel32")
 
 #include "../base/assert.hpp"
+#include "../base/traits.hpp"
 #include "../rnd/uuid.hpp"
-#include "detail.hpp"
 #include "error.hpp"
 #include "exceptions.hpp"
 
@@ -224,20 +224,20 @@ private:
         DMITIGR_ASSERT(*str != 0);
       }
       return std::string{str};
-    } else if constexpr (detail::Is_std_array<Dt>::value) {
+    } else if constexpr (Is_std_array<Dt>::value) {
       using V = typename Dt::value_type;
       if constexpr (std::is_same_v<V, Byte>) {
         Dt result;
         std::memcpy(result.data(), ptr, result.size());
         return result;
       } else
-        static_assert(detail::false_value<V>, "unsupported type");
+        static_assert(false_value<V>, "unsupported type");
     } else if constexpr (
       std::is_same_v<Dt, Byte>  || std::is_same_v<Dt, Word> ||
       std::is_same_v<Dt, Dword> || std::is_same_v<Dt, Qword>) {
       return *reinterpret_cast<const Dt*>(ptr);
     } else
-      static_assert(detail::false_value<T>, "unsupported type");
+      static_assert(false_value<T>, "unsupported type");
   }
 };
 
