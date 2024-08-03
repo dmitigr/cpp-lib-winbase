@@ -16,13 +16,17 @@
 
 #pragma once
 #pragma comment(lib, "ole32")
+#pragma comment(lib, "oleaut32")
 
 #include "../base/noncopymove.hpp"
-#include "windows.hpp"
+#include "strconv.hpp"
 
 #include <new>
+#include <stdexcept>
+#include <string>
 
 #include <Objbase.h>
+#include <oleauto.h>
 
 namespace dmitigr::winbase::com {
 
@@ -85,6 +89,21 @@ inline std::wstring server_registry_root(REFCLSID id)
 inline std::wstring server_registry_localserver32(REFCLSID id)
 {
   return server_registry_root(id).append(LR"(\LocalServer32)");
+}
+
+inline std::wstring_view to_wstring_view(const BSTR bstr)
+{
+  return {bstr, SysStringLen(bstr)};
+}
+
+inline std::wstring to_wstring(const BSTR bstr)
+{
+  return std::wstring{to_wstring_view(bstr)};
+}
+
+inline std::string to_string(const BSTR bstr, const UINT code_page = CP_UTF8)
+{
+  return winbase::utf16_to_utf8(to_wstring_view(bstr), code_page);
 }
 
 } // namespace dmitigr::winbase::com
