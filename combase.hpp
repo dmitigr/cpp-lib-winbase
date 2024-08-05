@@ -176,6 +176,12 @@ struct Variant final {
     return static_cast<VARENUM>(data_.vt);
   }
 
+  const BSTR bstr() const
+  {
+    check(VT_BSTR, "BSTR string");
+    return data_.bstrVal;
+  }
+
   std::string to_string_utf8() const
   {
     check(VT_BSTR, "UTF-8 string");
@@ -270,6 +276,12 @@ struct Variant final {
   {
     check(VT_DATE, "DATE");
     return data_.date;
+  }
+
+  PVOID to_pvoid() const
+  {
+    check(VT_BYREF, "PVOID");
+    return data_.byref;
   }
 
   const VARIANT& data() const noexcept
