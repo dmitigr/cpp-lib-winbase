@@ -225,27 +225,31 @@ std::optional<T> value(const HKEY key, LPCWSTR const subkey, LPCWSTR const name)
     return result_or_throw(std::move(result), err);
   } else if constexpr (std::is_same_v<Type, std::wstring>) {
     DWORD result_size{};
-    const auto err = RegGetValueW(key,
-      subkey,
-      name,
-      RRF_RT_REG_SZ,
-      NULL,
-      NULL,
-      &result_size);
-    if (err == ERROR_FILE_NOT_FOUND)
-      return std::nullopt;
-    else if (err != ERROR_SUCCESS || !result_size)
-      throw std::logic_error{"API bug"};
+    {
+      const auto err = RegGetValueW(key,
+        subkey,
+        name,
+        RRF_RT_REG_SZ,
+        NULL,
+        NULL,
+        &result_size);
+      if (err == ERROR_FILE_NOT_FOUND)
+        return std::nullopt;
+      else if (err != ERROR_SUCCESS || !result_size)
+        throw std::logic_error{"API bug"};
+    }
 
-    std::wstring result(result_size - 1, 0);
-    const auto err = RegGetValueW(key,
-      subkey,
-      name,
-      RRF_RT_REG_SZ,
-      NULL,
-      result.data(),
-      &result_size);
-    return result_or_throw(std::move(result), err);
+    {
+      std::wstring result(result_size/sizeof(result[0]) - 1, 0);
+      const auto err = RegGetValueW(key,
+        subkey,
+        name,
+        RRF_RT_REG_SZ,
+        NULL,
+        result.data(),
+        &result_size);
+      return result_or_throw(std::move(result), err);
+    }
   } else
     static_assert(false_value<T>, "unsupported type specified");
 }
