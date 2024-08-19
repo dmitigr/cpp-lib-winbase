@@ -21,6 +21,7 @@
 #include "../base/traits.hpp"
 #include "exceptions.hpp"
 
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 
@@ -198,7 +199,20 @@ inline void remove_key(const HKEY key, const std::wstring& subkey)
 template<typename T>
 std::optional<T> value(const HKEY key, LPCWSTR const subkey, LPCWSTR const name)
 {
-  if constexpr (std::is_same_v<T, DWORD>) {
+  static const auto result_or_throw = [](auto&& result, const auto error)
+    -> std::optional<T>
+  {
+    if (error == ERROR_FILE_NOT_FOUND)
+      return std::nullopt;
+    else if (error == ERROR_SUCCESS)
+      return std::make_optional<T>(std::move(result));
+    else
+      throw Sys_exception{static_cast<DWORD>(error),
+        "cannot get value of registry key"};
+  };
+
+  using Type = std::decay_t<T>;
+  if constexpr (std::is_same_v<Type, DWORD>) {
     DWORD result{};
     DWORD result_size{sizeof(result)};
     const auto err = RegGetValueW(key,
@@ -208,12 +222,30 @@ std::optional<T> value(const HKEY key, LPCWSTR const subkey, LPCWSTR const name)
       NULL, // FIXME: support REG_DWORD_BIG_ENDIAN
       &result,
       &result_size);
+    return result_or_throw(std::move(result), err);
+  } else if constexpr (std::is_same_v<Type, std::wstring>) {
+    DWORD result_size{};
+    const auto err = RegGetValueW(key,
+      subkey,
+      name,
+      RRF_RT_REG_SZ,
+      NULL,
+      NULL,
+      &result_size);
     if (err == ERROR_FILE_NOT_FOUND)
       return std::nullopt;
-    else if (err == ERROR_SUCCESS)
-      return result;
-    else
-      throw Sys_exception{static_cast<DWORD>(err), "cannot get value of registry key"};
+    else if (err != ERROR_SUCCESS || !result_size)
+      throw std::logic_error{"API bug"};
+
+    std::wstring result(result_size - 1, 0);
+    const auto err = RegGetValueW(key,
+      subkey,
+      name,
+      RRF_RT_REG_SZ,
+      NULL,
+      result.data(),
+      &result_size);
+    return result_or_throw(std::move(result), err);
   } else
     static_assert(false_value<T>, "unsupported type specified");
 }
