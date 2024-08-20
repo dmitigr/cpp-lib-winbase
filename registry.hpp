@@ -17,10 +17,12 @@
 #pragma once
 #pragma comment(lib, "advapi32")
 
+#include "../base/assert.hpp"
 #include "../base/noncopymove.hpp"
 #include "../base/traits.hpp"
 #include "exceptions.hpp"
 
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -196,6 +198,36 @@ inline void remove_key(const HKEY key, const std::wstring& subkey)
   remove_key(key, subkey.c_str());
 }
 
+/**
+ * @returns The number of bytes, including extra terminating null(s), required
+ * to store the requested string, or `0` if no such a string found.
+ */
+inline DWORD required_buffer_size(const HKEY key,
+  LPCWSTR const subkey, LPCWSTR const name)
+{
+  DWORD result{};
+  const auto err = RegGetValueW(key,
+    subkey,
+    name,
+    RRF_RT_REG_SZ,
+    NULL,
+    NULL,
+    &result);
+  if (err == ERROR_FILE_NOT_FOUND)
+    return 0;
+  else if (err != ERROR_SUCCESS || !result)
+    throw std::logic_error{"API bug"};
+  return result;
+}
+
+/**
+ * @tparam T The result type.
+ *
+ * @returns The string stored in the registry.
+ *
+ * @throws `std::runtime_error` if `T` is `std::wstring` and
+ * `required_buffer_size(key, subkey, name) % sizeof(T::value_type) != 0`.
+ */
 template<typename T>
 std::optional<T> value(const HKEY key, LPCWSTR const subkey, LPCWSTR const name)
 {
@@ -212,7 +244,8 @@ std::optional<T> value(const HKEY key, LPCWSTR const subkey, LPCWSTR const name)
   };
 
   using Type = std::decay_t<T>;
-  if constexpr (std::is_same_v<Type, DWORD>) {
+  using std::is_same_v;
+  if constexpr (is_same_v<Type, DWORD>) {
     DWORD result{};
     DWORD result_size{sizeof(result)};
     const auto err = RegGetValueW(key,
@@ -223,33 +256,25 @@ std::optional<T> value(const HKEY key, LPCWSTR const subkey, LPCWSTR const name)
       &result,
       &result_size);
     return result_or_throw(std::move(result), err);
-  } else if constexpr (std::is_same_v<Type, std::wstring>) {
-    DWORD result_size{};
-    {
-      const auto err = RegGetValueW(key,
-        subkey,
-        name,
-        RRF_RT_REG_SZ,
-        NULL,
-        NULL,
-        &result_size);
-      if (err == ERROR_FILE_NOT_FOUND)
-        return std::nullopt;
-      else if (err != ERROR_SUCCESS || !result_size)
-        throw std::logic_error{"API bug"};
-    }
-
-    {
-      std::wstring result(result_size/sizeof(result[0]) - 1, 0);
-      const auto err = RegGetValueW(key,
-        subkey,
-        name,
-        RRF_RT_REG_SZ,
-        NULL,
-        result.data(),
-        &result_size);
-      return result_or_throw(std::move(result), err);
-    }
+  } else if constexpr (is_same_v<Type, std::string> || is_same_v<Type, std::wstring>) {
+    constexpr const auto char_size = sizeof(typename Type::value_type);
+    auto buf_size = required_buffer_size(key, subkey, name);
+    if (!buf_size)
+      return std::nullopt;
+    else if (buf_size % char_size)
+      throw std::runtime_error{"cannot get string (REG_SZ) from registry:"
+        " incompatible destination string type"};
+    Type result(buf_size/char_size - 1, 0);
+    const auto err = RegGetValueW(key,
+      subkey,
+      name,
+      RRF_RT_REG_SZ,
+      NULL,
+      result.data(),
+      &buf_size);
+    DMITIGR_ASSERT(buf_size == result.size()*char_size ||
+      buf_size == (result.size() + 1)*char_size);
+    return result_or_throw(std::move(result), err);
   } else
     static_assert(false_value<T>, "unsupported type specified");
 }
