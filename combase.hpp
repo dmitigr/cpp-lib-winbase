@@ -513,7 +513,6 @@ public:
     data_ = std::move(rhs.data_);
     rhs.data_ = {};
     rhs.is_owns_ = {};
-    VariantInit(&rhs.data_);
   }
 
   Basic_variant& operator=(Basic_variant&& rhs) noexcept
