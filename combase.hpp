@@ -698,7 +698,7 @@ private:
 
   bool is(const VARENUM tp) const noexcept
   {
-    return data_.vt == tp;
+    return bool(data_.vt & tp);
   }
 
   [[noreturn]] static void throw_conversion_error(const std::string& tpnm)
