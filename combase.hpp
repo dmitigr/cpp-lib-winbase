@@ -119,6 +119,8 @@ inline std::string to_string(const BSTR bstr, const UINT code_page = CP_UTF8)
 // SAFEARRAY
 // -----------------------------------------------------------------------------
 
+class Variant;
+
 /// A wrapper around SAFEARRAY.
 class Safe_array final {
 public:
@@ -265,6 +267,9 @@ public:
     {
       return const_cast<T*>(static_cast<const Slice*>(this)->array<T>());
     }
+
+    /// @returns An instance of Variant at the specified `index`.
+    Variant variant(const std::size_t index) const;
 
     /// @returns The dimension of this slice.
     USHORT dimension() const noexcept
@@ -594,10 +599,16 @@ public:
     return data_.date;
   }
 
-  PVOID to_pvoid() const
+  const PVOID to_pvoid() const
   {
     check(VT_BYREF, "PVOID");
     return data_.byref;
+  }
+
+  Safe_array to_array() const
+  {
+    check(VT_ARRAY, "SAFEARRAY");
+    return Safe_array{data_.parray, false};
   }
 
   const VARIANT& data() const noexcept
@@ -625,5 +636,10 @@ private:
       throw_conversion_error(tpnm);
   }
 };
+
+Variant Safe_array::Slice::variant(const std::size_t index) const
+{
+  return Variant{array<VARIANT>()[index], false};
+}
 
 } // namespace dmitigr::winbase::com
