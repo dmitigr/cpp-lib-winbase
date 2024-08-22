@@ -19,6 +19,7 @@
 #pragma comment(lib, "oleaut32")
 
 #include "../base/noncopymove.hpp"
+#include "../base/traits.hpp"
 #include "strconv.hpp"
 
 #include <algorithm>
@@ -26,6 +27,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <Objbase.h>
 #include <oaidl.h> // VARIANT
@@ -114,10 +116,288 @@ inline std::string to_string(const BSTR bstr, const UINT code_page = CP_UTF8)
 }
 
 // -----------------------------------------------------------------------------
+// SAFEARRAY
+// -----------------------------------------------------------------------------
+
+/// A wrapper around SAFEARRAY.
+class Safe_array final {
+public:
+  /// Destroys the underlying data if `is_owns()`.
+  ~Safe_array()
+  {
+    if (is_owns())
+      SafeArrayDestroy(data_);
+  }
+
+  /// Constructs an empty instance.
+  Safe_array() = default;
+
+  /**
+   * @brief Constructs an array of elements of the specified type.
+   *
+   * @param vt The array elements type.
+   * @param rgsa The bounds of each dimension of the array.
+   */
+  Safe_array(const VARTYPE vt, std::vector<SAFEARRAYBOUND> rgsa)
+    : data_{SafeArrayCreate(vt, rgsa.size(), rgsa.data())}
+  {
+    if (!data_)
+      throw std::runtime_error{"cannot create Safe_array"};
+  }
+
+  /**
+   * @brief Constructs an array.
+   *
+   * @param data The existing array.
+   * @param is_owns The value of `true` indicates ownership transferring of
+   * `data` to this instance.
+   */
+  Safe_array(SAFEARRAY* const data, const bool is_owns)
+    : data_{data}
+    , is_owns_{is_owns}
+  {}
+
+  /**
+   * @brief Copies the instance.
+   *
+   * @details If `is_owns()` a deep copying takes place.
+   */
+  Safe_array(const Safe_array& rhs)
+  {
+    if (rhs.data_) {
+      if (rhs.is_owns_) {
+        const auto err = SafeArrayCopy(rhs.data_, &data_);
+        if (FAILED(err))
+          // FIXME: use wincom::Win_error
+          throw std::runtime_error{"cannot copy Safe_array"};
+      } else
+        data_ = rhs.data_;
+      is_owns_ = rhs.is_owns_;
+    }
+  }
+
+  /// Copy-assignable.
+  Safe_array& operator=(const Safe_array& rhs)
+  {
+    Safe_array tmp{rhs};
+    swap(tmp);
+    return *this;
+  }
+
+  /// Move-constructible.
+  Safe_array(Safe_array&& rhs) noexcept
+    : data_{rhs.data_}
+    , is_owns_{rhs.is_owns_}
+  {
+    rhs.data_ = {};
+    rhs.is_owns_ = {};
+  }
+
+  /// Move-assignable.
+  Safe_array& operator=(Safe_array&& rhs) noexcept
+  {
+    Safe_array tmp{std::move(rhs)};
+    swap(tmp);
+    return *this;
+  }
+
+  /// Swaps this instance with `rhs`.
+  void swap(Safe_array& rhs) noexcept
+  {
+    using std::swap;
+    swap(data_, rhs.data_);
+    swap(is_owns_, rhs.is_owns_);
+  }
+
+  /// An array slice.
+  class Slice final : Noncopymove {
+  public:
+    /// Decrements the lock count of the array.
+    ~Slice()
+    {
+      if (self_.data_)
+        SafeArrayUnlock(self_.data_);
+    }
+
+    /**
+     * @tparam Can be `BSTR`, `IUnknown`, `IDispatch` and `VARIANT`.
+     *
+     * @returns The pointer to the first element of the underlying part of array
+     * which is represented by this slice.
+     */
+    template<typename T>
+    const T* array() const
+    {
+      using std::is_same_v;
+      using D = std::decay_t<T>;
+      USHORT feat{};
+      const char* msg{};
+      if constexpr (is_same_v<D, BSTR>) {
+        feat = FADF_BSTR;
+      } else if constexpr (is_same_v<D, IUnknown>) {
+        feat = FADF_UNKNOWN;
+      } else if constexpr (is_same_v<D, IDispatch>) {
+        feat = FADF_DISPATCH;
+      } else if constexpr (is_same_v<D, VARIANT>) {
+        feat = FADF_VARIANT;
+      } else
+        static_assert(false_value<T>);
+      if (!bool(self_.features() & feat))
+        throw std::runtime_error{"cannot get array of requested type"};
+      return static_cast<const T*>(self_.data().pvData) + absolute_offset_;
+    }
+
+    /// @overload
+    template<typename T>
+    T* array()
+    {
+      return const_cast<T*>(static_cast<const Slice*>(this)->array<T>());
+    }
+
+    /// @returns The dimension of this slice.
+    USHORT dimension() const noexcept
+    {
+      return dim_;
+    }
+
+    /// @returns The size of this slice.
+    std::size_t size() const noexcept
+    {
+      return size_;
+    }
+
+    /// @returns The lower bound of this slice.
+    LONG lower_bound() const
+    {
+      return self_.data().rgsabound[dim_].lLbound;
+    }
+
+    /// @returns `true` if this slice represents a vector.
+    bool is_vector() const
+    {
+      return dimension() == self_.dimension_count() - 1;
+    }
+
+    /// @returns The slice count.
+    std::size_t slice_count() const
+    {
+      return !is_vector() * self_.data().rgsabound[dim_].cElements;
+    }
+
+    /**
+     * @param index Zero-based slice index.
+     *
+     * @returns The specified slice.
+     */
+    Slice slice(const std::size_t index) const
+    {
+      const auto& data = self_.data();
+      if (!(dim_ + 1 < data.cDims))
+        throw std::invalid_argument{"Safe_array dimension overflow"};
+      else if (!(index < data.rgsabound[dim_].cElements))
+        throw std::invalid_argument{"Safe_array index overflow"};
+      return Slice{self_, static_cast<USHORT>(dim_ + 1), index, absolute_offset_};
+    }
+
+  private:
+    friend Safe_array;
+
+    const Safe_array& self_;
+    USHORT dim_{};
+    std::size_t absolute_offset_{};
+    std::size_t size_{};
+
+    /// Increments the lock count of the array.
+    Slice(const Safe_array& self, const USHORT dim,
+      const std::size_t slice_offset,
+      const std::size_t absolute_offset)
+      : self_{self}
+      , dim_{dim}
+    {
+      {
+        const auto err = SafeArrayLock(self.data_);
+        if (FAILED(err))
+          throw std::runtime_error{"cannot create Safe_array::Slice:"
+            " cannot lock SAFEARRAY"};
+      }
+
+      size_ = [&]
+      {
+        std::size_t result{1};
+        const USHORT dcount{self_.dimension_count()};
+        for (USHORT d{dim_}; d < dcount; ++d)
+          result *= self_.data().rgsabound[d].cElements;
+        return result;
+      }();
+      absolute_offset_ = absolute_offset + slice_offset*size_;
+    }
+  };
+
+  /// @returns `true` if this instance is owns the underlying data.
+  bool is_owns() const noexcept
+  {
+    return is_owns_ && data_;
+  }
+
+  /// @returns `true` if this instance has the underlying data.
+  bool has_data() const noexcept
+  {
+    return data_;
+  }
+
+  /// @returns The dimension count.
+  USHORT dimension_count() const
+  {
+    return data().cDims;
+  }
+
+  /// @returns The feature flags.
+  USHORT features() const
+  {
+    return data().fFeatures;
+  }
+
+  /// @returns The element size.
+  ULONG element_size() const
+  {
+    return data().cbElements;
+  }
+
+  /// @returns The value of lock counter of the underlying data.
+  ULONG lock_count() const
+  {
+    return data().cLocks;
+  }
+
+  /**
+   * @brief Increments the lock count of the underying array.
+   *
+   * @returns The slice of zero dimension.
+   */
+  Slice slice() const
+  {
+    return Slice{*this, 0, 0, 0};
+  }
+
+  /// @returns The underlying data.
+  const SAFEARRAY& data() const
+  {
+    if (!has_data())
+      throw std::logic_error{"cannot use invalid instance of Safe_array"};
+    return *data_;
+  }
+
+private:
+  SAFEARRAY* data_{};
+  bool is_owns_{};
+};
+
+// -----------------------------------------------------------------------------
 // VARIANT
 // -----------------------------------------------------------------------------
 
-struct Variant final {
+class Variant final {
+public:
   ~Variant()
   {
     VariantClear(&data_);
