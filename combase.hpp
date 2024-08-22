@@ -719,7 +719,7 @@ template<typename>
 Const_variant Basic_safe_array<IsConstArray>::Basic_slice<IsConstSlice>::
   variant(const std::size_t index) const
 {
-  return Variant{array<VARIANT>()[index], false};
+  return Const_variant{array<VARIANT>()[index], false};
 }
 
 template<bool IsConstArray>
