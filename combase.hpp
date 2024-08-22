@@ -139,7 +139,8 @@ public:
    * @param rgsa The bounds of each dimension of the array.
    */
   Safe_array(const VARTYPE vt, std::vector<SAFEARRAYBOUND> rgsa)
-    : data_{SafeArrayCreate(vt, rgsa.size(), rgsa.data())}
+    : is_owns_{true}
+    , data_{SafeArrayCreate(vt, rgsa.size(), rgsa.data())}
   {
     if (!data_)
       throw std::runtime_error{"cannot create Safe_array"};
@@ -153,23 +154,22 @@ public:
    * `data` to this instance.
    */
   Safe_array(SAFEARRAY* const data, const bool is_owns)
-    : data_{data}
-    , is_owns_{is_owns}
+    : is_owns_{is_owns}
+    , data_{data}
   {}
 
   /**
    * @brief Copies the instance.
    *
-   * @details If `is_owns()` a deep copying takes place.
+   * @par Effects
+   * `is_owns() == rhs.is_owns()`.
    */
   Safe_array(const Safe_array& rhs)
   {
     if (rhs.data_) {
       if (rhs.is_owns_) {
-        const auto err = SafeArrayCopy(rhs.data_, &data_);
-        if (FAILED(err))
-          // FIXME: use wincom::Win_error
-          throw std::runtime_error{"cannot copy Safe_array"};
+        auto copy = rhs.copy();
+        swap(copy);
       } else
         data_ = rhs.data_;
       is_owns_ = rhs.is_owns_;
@@ -186,11 +186,11 @@ public:
 
   /// Move-constructible.
   Safe_array(Safe_array&& rhs) noexcept
-    : data_{rhs.data_}
-    , is_owns_{rhs.is_owns_}
+    : is_owns_{rhs.is_owns_}
+    , data_{rhs.data_}
   {
-    rhs.data_ = {};
     rhs.is_owns_ = {};
+    rhs.data_ = {};
   }
 
   /// Move-assignable.
@@ -205,8 +205,20 @@ public:
   void swap(Safe_array& rhs) noexcept
   {
     using std::swap;
-    swap(data_, rhs.data_);
     swap(is_owns_, rhs.is_owns_);
+    swap(data_, rhs.data_);
+  }
+
+  /// @returns A copy of this instance which owns the underlying data.
+  Safe_array copy() const
+  {
+    Safe_array result;
+    const auto err = SafeArrayCopy(data_, &result.data_);
+    if (FAILED(err))
+      // FIXME: use wincom::Win_error
+      throw std::runtime_error{"cannot copy Safe_array"};
+    result.is_owns_ = true;
+    return result;
   }
 
   /// An array slice.
@@ -388,8 +400,8 @@ public:
   }
 
 private:
-  SAFEARRAY* data_{};
   bool is_owns_{};
+  SAFEARRAY* data_{};
 };
 
 // -----------------------------------------------------------------------------
@@ -400,7 +412,8 @@ class Variant final {
 public:
   ~Variant()
   {
-    VariantClear(&data_);
+    if (is_owns())
+      VariantClear(&data_);
   }
 
   Variant()
@@ -408,7 +421,8 @@ public:
     VariantInit(&data_);
   }
 
-  Variant(const VARIANT dat)
+  Variant(const VARIANT dat, const bool is_owns)
+    : is_owns_{is_owns}
   {
     VariantInit(&data_);
     data_ = dat;
@@ -417,10 +431,12 @@ public:
   Variant(const Variant& rhs)
   {
     VariantInit(&data_);
-    const auto err = VariantCopyInd(&data_, &rhs.data_);
-    if (FAILED(err))
-      // FIXME: use wincom::Win_error
-      throw std::runtime_error{"cannot copy Variant"};
+    if (rhs.is_owns_) {
+      auto copy = rhs.copy();
+      swap(copy);
+    } else
+      data_ = rhs.data_;
+    is_owns_ = rhs.is_owns_;
   }
 
   Variant& operator=(const Variant& rhs)
@@ -435,6 +451,7 @@ public:
     VariantInit(&data_);
     data_ = std::move(rhs.data_);
     rhs.data_ = {};
+    rhs.is_owns_ = {};
     VariantInit(&rhs.data_);
   }
 
@@ -448,7 +465,26 @@ public:
   void swap(Variant& rhs) noexcept
   {
     using std::swap;
+    swap(is_owns_, rhs.is_owns_);
     swap(data_, rhs.data_);
+  }
+
+  /// @returns A copy of this instance which owns the underlying data.
+  Variant copy() const
+  {
+    Variant result;
+    const auto err = VariantCopyInd(&data_, &result.data_);
+    if (FAILED(err))
+      // FIXME: use wincom::Win_error
+      throw std::runtime_error{"cannot copy Variant"};
+    result.is_owns_ = true;
+    return result;
+  }
+
+  /// @returns `true` if this instance is owns the underlying data.
+  bool is_owns() const noexcept
+  {
+    return is_owns_;
   }
 
   VARENUM type() const noexcept
@@ -570,7 +606,8 @@ public:
   }
 
 private:
-  VARIANT data_{};
+  bool is_owns_{};
+  mutable VARIANT data_{};
 
   bool is(const VARENUM tp) const noexcept
   {
