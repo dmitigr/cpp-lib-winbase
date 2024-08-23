@@ -510,8 +510,9 @@ public:
   Basic_variant(Basic_variant&& rhs) noexcept
   {
     VariantInit(&data_);
-    data_ = std::move(rhs.data_);
+    data_ = rhs.data_;
     rhs.data_ = {};
+    is_owns_ = rhs.is_owns_;
     rhs.is_owns_ = {};
   }
 
@@ -533,7 +534,7 @@ public:
   Basic_variant copy() const
   {
     Basic_variant result;
-    const auto err = VariantCopyInd(&data_, &result.data_);
+    const auto err = VariantCopyInd(&result.data_, &data_);
     if (FAILED(err))
       // FIXME: use wincom::Win_error
       throw std::runtime_error{"cannot copy Variant"};
