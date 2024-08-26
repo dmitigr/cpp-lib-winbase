@@ -40,13 +40,25 @@ namespace dmitigr::winbase::com {
 // Forward declarations
 // -----------------------------------------------------------------------------
 
-template<bool IsConst> class Basic_safe_array;
-using Safe_array = Basic_safe_array<false>;
-using Const_safe_array = Basic_safe_array<true>;
+template<bool IsConst, bool IsOwns>
+class Basic_safe_array;
 
-template<bool IsConst> class Basic_variant;
-using Variant = Basic_variant<false>;
-using Const_variant = Basic_variant<true>;
+using Safe_array = Basic_safe_array<false, true>;
+using Const_safe_array = Basic_safe_array<true, true>;
+
+using Safe_array_view = Basic_safe_array<false, false>;
+using Const_safe_array_view = Basic_safe_array<true, false>;
+
+// -----------------------------------------------------------------------------
+
+template<bool IsConst, bool IsOwns>
+class Basic_variant;
+
+using Variant = Basic_variant<false, true>;
+using Const_variant = Basic_variant<true, true>;
+
+using Variant_view = Basic_variant<false, false>;
+using Const_variant_view = Basic_variant<true, false>;
 
 // -----------------------------------------------------------------------------
 // Memory
@@ -141,13 +153,16 @@ inline std::string to_string(const BSTR bstr, const UINT code_page = CP_UTF8)
 // -----------------------------------------------------------------------------
 
 /// A wrapper around SAFEARRAY.
-template<bool IsConst>
+template<bool IsConst, bool IsOwns>
 class Basic_safe_array final {
 public:
-  /// Destroys the underlying data if `is_owns()`.
+  static constexpr const bool is_const{IsConst};
+  static constexpr const bool is_owns{IsOwns};
+
+  /// Destroys the underlying data if `IsOwns`.
   ~Basic_safe_array()
   {
-    if (is_owns())
+    if (IsOwns)
       SafeArrayDestroy(data_);
   }
 
@@ -161,8 +176,7 @@ public:
    * @param rgsa The bounds of each dimension of the array.
    */
   Basic_safe_array(const VARTYPE vt, std::vector<SAFEARRAYBOUND> rgsa)
-    : is_owns_{true}
-    , data_{SafeArrayCreate(vt, rgsa.size(), rgsa.data())}
+    : data_{SafeArrayCreate(vt, rgsa.size(), rgsa.data())}
   {
     if (!data_)
       throw std::runtime_error{"cannot create Safe_array"};
@@ -172,34 +186,34 @@ public:
    * @brief Constructs an array.
    *
    * @param data The existing array.
-   * @param is_owns The value of `true` indicates ownership transferring of
-   * `data` to this instance.
    */
-  Basic_safe_array(SAFEARRAY* const data, const bool is_owns)
-    : is_owns_{is_owns}
-    , data_{data}
+  explicit Basic_safe_array(SAFEARRAY* const data)
+    : data_{data}
   {}
 
-  /**
-   * @brief Copies the instance.
-   *
-   * @par Effects
-   * `is_owns() == rhs.is_owns()`.
-   */
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns && !IsRhsOwns>>
+  explicit Basic_safe_array(const Basic_safe_array<IsRhsConst, !IsRhsOwns>& rhs)
+  {
+    copy_from(rhs);
+  }
+
+  /// Copies the instance.
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns || !IsOwns && IsRhsOwns>>
   Basic_safe_array(const Basic_safe_array& rhs)
   {
-    if (rhs.data_) {
-      if (rhs.is_owns_) {
-        auto copy = rhs.copy();
-        swap(copy);
-      } else
-        data_ = rhs.data_;
-      is_owns_ = rhs.is_owns_;
-    }
+    static_assert(IsOwns || IsConst || !IsRhsConst);
+    if constexpr (IsOwns)
+      copy_from(rhs);
+    else
+      data_ = rhs.data_;
   }
 
   /// Copy-assignable.
-  Basic_safe_array& operator=(const Basic_safe_array& rhs)
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns || !IsOwns && IsRhsOwns>>
+  Basic_safe_array& operator=(const Basic_safe_array<IsRhsConst, IsRhsOwns>& rhs)
   {
     Basic_safe_array tmp{rhs};
     swap(tmp);
@@ -207,15 +221,18 @@ public:
   }
 
   /// Move-constructible.
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns>>
   Basic_safe_array(Basic_safe_array&& rhs) noexcept
-    : is_owns_{rhs.is_owns_}
-    , data_{rhs.data_}
+    : data_{rhs.data_}
   {
-    rhs.is_owns_ = {};
+    static_assert(IsConst || !IsRhsConst);
     rhs.data_ = {};
   }
 
   /// Move-assignable.
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns>>
   Basic_safe_array& operator=(Basic_safe_array&& rhs) noexcept
   {
     Basic_safe_array tmp{std::move(rhs)};
@@ -227,20 +244,7 @@ public:
   void swap(Basic_safe_array& rhs) noexcept
   {
     using std::swap;
-    swap(is_owns_, rhs.is_owns_);
     swap(data_, rhs.data_);
-  }
-
-  /// @returns A copy of this instance which owns the underlying data.
-  Basic_safe_array copy() const
-  {
-    Basic_safe_array result;
-    const auto err = SafeArrayCopy(data_, &result.data_);
-    if (FAILED(err))
-      // FIXME: use wincom::Win_error
-      throw std::runtime_error{"cannot copy Safe_array"};
-    result.is_owns_ = true;
-    return result;
   }
 
   // Forward declaration of an array slice.
@@ -299,12 +303,10 @@ public:
     }
 
     /// @returns An instance of Variant at the specified `index`.
-    template<typename = void>
-    Const_variant variant(const std::size_t index) const;
+    Const_variant_view variant(const std::size_t index) const;
 
     /// @overload
-    template<typename = std::enable_if_t<!IsConst>>
-    Variant variant(const std::size_t index);
+    Variant_view variant(const std::size_t index);
 
     /// @returns The dimension of this slice.
     USHORT dimension() const noexcept
@@ -347,9 +349,9 @@ public:
     }
 
     /// @overload
-    template<typename = std::enable_if_t<!IsConst>>
     Slice slice(const std::size_t index)
     {
+      static_assert(!IsConst);
       return make_slice<Slice>(index);
     }
 
@@ -398,18 +400,6 @@ public:
     }
   };
 
-  /// @returns `true` if this instance is owns the underlying data.
-  bool is_owns() const noexcept
-  {
-    return is_owns_ && data_;
-  }
-
-  /// @returns `true` if this instance has the underlying data.
-  bool has_data() const noexcept
-  {
-    return data_;
-  }
-
   /// @returns The dimension count.
   USHORT dimension_count() const
   {
@@ -445,35 +435,67 @@ public:
   }
 
   /// @overload
-  template<typename = std::enable_if_t<!IsConst>>
   Slice slice()
   {
+    static_assert(!IsConst);
     return Slice{*this, 0, 0, 0};
   }
 
   /// @returns The underlying data.
   const SAFEARRAY& data() const
   {
-    if (!has_data())
+    if (!data_)
       throw std::logic_error{"cannot use invalid instance of Safe_array"};
     return *data_;
   }
 
+  /// @overload
+  SAFEARRAY& data()
+  {
+    static_assert(!IsConst);
+    return const_cast<SAFEARRAY&>(static_cast<const Basic_safe_array*>(this)->data());
+  }
+
+  /// @returns The underlying data.
+  const SAFEARRAY* data_ptr() const noexcept
+  {
+    return data_;
+  }
+
+  /// @overload
+  SAFEARRAY* data_ptr() noexcept
+  {
+    static_assert(!IsConst);
+    return data_;
+  }
+
 private:
-  bool is_owns_{};
   SAFEARRAY* data_{};
+
+  void copy_from(Basic_safe_array& rhs)
+  {
+    if (rhs.data_) {
+      const auto err = SafeArrayCopy(rhs.data_, &data_);
+      if (FAILED(err))
+        // FIXME: use wincom::Win_error
+        throw std::runtime_error{"cannot copy Safe_array"};
+    }
+  }
 };
 
 // -----------------------------------------------------------------------------
 // VARIANT
 // -----------------------------------------------------------------------------
 
-template<bool IsConst>
+template<bool IsConst, bool IsOwns>
 class Basic_variant final {
 public:
+  static constexpr const bool is_const{IsConst};
+  static constexpr const bool is_owns{IsOwns};
+
   ~Basic_variant()
   {
-    if (is_owns())
+    if constexpr (IsOwns)
       VariantClear(&data_);
   }
 
@@ -482,41 +504,53 @@ public:
     VariantInit(&data_);
   }
 
-  Basic_variant(const VARIANT dat, const bool is_owns)
-    : is_owns_{is_owns}
+  Basic_variant(const VARIANT dat)
   {
     VariantInit(&data_);
     data_ = dat;
   }
 
-  Basic_variant(const Basic_variant& rhs)
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns && !IsRhsOwns>>
+  explicit Basic_variant(const Basic_variant<IsRhsConst, !IsRhsOwns>& rhs)
   {
-    VariantInit(&data_);
-    if (rhs.is_owns_) {
-      auto copy = rhs.copy();
-      swap(copy);
-    } else
-      data_ = rhs.data_;
-    is_owns_ = rhs.is_owns_;
+    copy_from(rhs);
   }
 
-  Basic_variant& operator=(const Basic_variant& rhs)
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns || !IsOwns && IsRhsOwns>>
+  Basic_variant(const Basic_variant<IsRhsConst, IsRhsOwns>& rhs)
+  {
+    static_assert(IsOwns || IsConst || !IsRhsConst);
+    VariantInit(&data_);
+    if constexpr (IsOwns)
+      copy_from(rhs);
+    else
+      data_ = rhs.data_;
+  }
+
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns || !IsOwns && IsRhsOwns>>
+  Basic_variant& operator=(const Basic_variant<IsRhsConst, IsRhsOwns>& rhs)
   {
     Basic_variant tmp{rhs};
     swap(tmp);
     return *this;
   }
 
-  Basic_variant(Basic_variant&& rhs) noexcept
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns>>
+  Basic_variant(Basic_variant<IsRhsConst, IsRhsOwns>&& rhs) noexcept
   {
+    static_assert(IsConst || !IsRhsConst);
     VariantInit(&data_);
     data_ = rhs.data_;
-    rhs.data_ = {};
-    is_owns_ = rhs.is_owns_;
-    rhs.is_owns_ = {};
+    VariantInit(&rhs.data_);
   }
 
-  Basic_variant& operator=(Basic_variant&& rhs) noexcept
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns>>
+  Basic_variant& operator=(Basic_variant<IsRhsConst, IsRhsOwns>&& rhs) noexcept
   {
     Basic_variant tmp{std::move(rhs)};
     swap(tmp);
@@ -526,26 +560,7 @@ public:
   void swap(Basic_variant& rhs) noexcept
   {
     using std::swap;
-    swap(is_owns_, rhs.is_owns_);
     swap(data_, rhs.data_);
-  }
-
-  /// @returns A copy of this instance which owns the underlying data.
-  Basic_variant copy() const
-  {
-    Basic_variant result;
-    const auto err = VariantCopyInd(&result.data_, &data_);
-    if (FAILED(err))
-      // FIXME: use wincom::Win_error
-      throw std::runtime_error{"cannot copy Variant"};
-    result.is_owns_ = true;
-    return result;
-  }
-
-  /// @returns `true` if this instance is owns the underlying data.
-  bool is_owns() const noexcept
-  {
-    return is_owns_;
   }
 
   VARENUM type() const noexcept
@@ -668,17 +683,17 @@ public:
     return data_.byref;
   }
 
-  Const_safe_array to_array() const
+  Const_safe_array_view to_array() const
   {
     check(VT_ARRAY, "SAFEARRAY");
-    return Const_safe_array{data_.parray, false};
+    return Const_safe_array_view{data_.parray};
   }
 
-  template<typename = std::enable_if_t<!IsConst>>
-  Safe_array to_array()
+  Safe_array_view to_array()
   {
+    static_assert(!IsConst);
     check(VT_ARRAY, "SAFEARRAY");
-    return Safe_array{data_.parray, false};
+    return Safe_array_view{data_.parray};
   }
 
   const VARIANT& data() const noexcept
@@ -687,14 +702,21 @@ public:
   }
 
   template<typename = std::enable_if_t<!IsConst>>
-  VARIANT& data() const noexcept
+  VARIANT& data() noexcept
   {
     return data_;
   }
 
 private:
-  bool is_owns_{};
   mutable VARIANT data_{};
+
+  void copy_from(const Basic_variant& rhs)
+  {
+    const auto err = VariantCopyInd(&data_, &rhs.data_);
+    if (FAILED(err))
+      // FIXME: use wincom::Win_error
+      throw std::runtime_error{"cannot copy Variant"};
+  }
 
   bool is(const VARENUM tp) const noexcept
   {
@@ -713,22 +735,21 @@ private:
   }
 };
 
-template<bool IsConstArray>
+template<bool IsConstArray, bool IsOwnsArray>
 template<bool IsConstSlice>
-template<typename>
-Const_variant Basic_safe_array<IsConstArray>::Basic_slice<IsConstSlice>::
-  variant(const std::size_t index) const
+Const_variant_view Basic_safe_array<IsConstArray, IsOwnsArray>
+  ::Basic_slice<IsConstSlice>::variant(const std::size_t index) const
 {
-  return Const_variant{array<VARIANT>()[index], false};
+  return Const_variant_view{array<VARIANT>()[index]};
 }
 
-template<bool IsConstArray>
+template<bool IsConstArray, bool IsOwnsArray>
 template<bool IsConstSlice>
-template<typename>
-Variant Basic_safe_array<IsConstArray>::Basic_slice<IsConstSlice>::
-  variant(const std::size_t index)
+Variant_view Basic_safe_array<IsConstArray, IsOwnsArray>
+  ::Basic_slice<IsConstSlice>::variant(const std::size_t index)
 {
-  return Variant{array<VARIANT>()[index], false};
+  static_assert(!IsConstSlice);
+  return Variant_view{array<VARIANT>()[index]};
 }
 
 } // namespace dmitigr::winbase::com
