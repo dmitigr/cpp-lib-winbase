@@ -296,9 +296,10 @@ public:
     }
 
     /// @overload
-    template<typename T, typename = std::enable_if_t<!IsConst>>
+    template<typename T>
     T* array()
     {
+      static_assert(!IsConst);
       return const_cast<T*>(static_cast<const Basic_slice*>(this)->array<T>());
     }
 
