@@ -199,8 +199,8 @@ inline void remove_key(const HKEY key, const std::wstring& subkey)
 }
 
 /**
- * @returns The number of bytes, including extra terminating null(s), required
- * to store the requested string, or `0` if no such a string found.
+ * @returns The number of bytes, including `2` extra terminating nulls,
+ * required to store the requested string, or `0` if no such a string found.
  */
 inline DWORD required_buffer_size(const HKEY key,
   LPCWSTR const subkey, LPCWSTR const name)
@@ -258,13 +258,14 @@ std::optional<T> value(const HKEY key, LPCWSTR const subkey, LPCWSTR const name)
     return result_or_throw(std::move(result), err);
   } else if constexpr (is_same_v<Type, std::string> || is_same_v<Type, std::wstring>) {
     constexpr const auto char_size = sizeof(typename Type::value_type);
+    static_assert(char_size <= sizeof(wchar_t));
     auto buf_size = required_buffer_size(key, subkey, name);
     if (!buf_size)
       return std::nullopt;
     else if (buf_size % char_size)
       throw std::runtime_error{"cannot get string (REG_SZ) from registry:"
         " incompatible destination string type"};
-    Type result(buf_size/char_size - 1, 0);
+    Type result(buf_size/char_size - sizeof(wchar_t)/char_size, 0);
     const auto err = RegGetValueW(key,
       subkey,
       name,
