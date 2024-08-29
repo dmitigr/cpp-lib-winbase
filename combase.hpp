@@ -159,14 +159,26 @@ template<typename> struct Variant_type_traits final {
 template<> struct Variant_type_traits<std::int8_t> final {
   static constexpr const VARENUM vt{VT_I1};
 };
+template<> struct Variant_type_traits<std::uint8_t> final {
+  static constexpr const VARENUM vt{VT_UI1};
+};
 template<> struct Variant_type_traits<std::int16_t> final {
   static constexpr const VARENUM vt{VT_I2};
+};
+template<> struct Variant_type_traits<std::uint16_t> final {
+  static constexpr const VARENUM vt{VT_UI2};
 };
 template<> struct Variant_type_traits<std::int32_t> final {
   static constexpr const VARENUM vt{VT_I4};
 };
+template<> struct Variant_type_traits<std::uint32_t> final {
+  static constexpr const VARENUM vt{VT_UI4};
+};
 template<> struct Variant_type_traits<std::int64_t> final {
   static constexpr const VARENUM vt{VT_I8};
+};
+template<> struct Variant_type_traits<std::uint64_t> final {
+  static constexpr const VARENUM vt{VT_UI8};
 };
 } // namespace detail
 
