@@ -152,6 +152,24 @@ inline std::string to_string(const BSTR bstr, const UINT code_page = CP_UTF8)
 // SAFEARRAY
 // -----------------------------------------------------------------------------
 
+namespace detail {
+template<typename> struct Variant_type_traits final {
+  static_assert(false, "not specialized");
+};
+template<> struct Variant_type_traits<std::int8_t> final {
+  static constexpr const VARENUM vt{VT_I1};
+};
+template<> struct Variant_type_traits<std::int16_t> final {
+  static constexpr const VARENUM vt{VT_I2};
+};
+template<> struct Variant_type_traits<std::int32_t> final {
+  static constexpr const VARENUM vt{VT_I4};
+};
+template<> struct Variant_type_traits<std::int64_t> final {
+  static constexpr const VARENUM vt{VT_I8};
+};
+} // namespace detail
+
 /// A wrapper around SAFEARRAY.
 template<bool IsConst, bool IsOwns>
 class Basic_safe_array final {
@@ -288,6 +306,13 @@ public:
         feat = FADF_DISPATCH;
       } else if constexpr (is_same_v<D, VARIANT>) {
         feat = FADF_VARIANT;
+      } else if constexpr (std::is_arithmetic_v<D>) {
+        feat = FADF_HAVEVARTYPE;
+        VARTYPE vt{};
+        if (FAILED(SafeArrayGetVartype(self_.data_, &vt)))
+          throw std::runtime_error{"cannot get VARTYPE of SAFEARRAY"};
+        else if (detail::Variant_type_traits<D>::vt != vt)
+          throw std::runtime_error{"cannot get array of requested type"};
       } else
         static_assert(false_value<T>);
       if (!bool(self_.features() & feat))
