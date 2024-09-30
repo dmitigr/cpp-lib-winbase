@@ -714,9 +714,9 @@ public:
     return data_.byref;
   }
 
-  template<typename = std::enable_if_t<!IsConst>>
   PVOID to_pvoid()
   {
+    static_assert(!IsConst);
     check(VT_BYREF, "PVOID");
     return data_.byref;
   }
@@ -739,9 +739,9 @@ public:
     return data_;
   }
 
-  template<typename = std::enable_if_t<!IsConst>>
   VARIANT& data() noexcept
   {
+    static_assert(!IsConst);
     return data_;
   }
 
