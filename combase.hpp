@@ -453,6 +453,49 @@ struct Variant_type_traits<std::basic_string<Ch, Tr, Al>> final {
 };
 } // namespace detail
 
+/**
+ * @param flags Flags which are passed to Basic_variant::to_variant().
+ *
+ * @returns The value of type `T` coerced from `variant`.
+ */
+template<typename T, bool IsConst, bool IsOwns>
+T to(const Basic_variant<IsConst, IsOwns>& variant, const USHORT flags = {})
+{
+  using D = std::decay_t<T>;
+  using std::is_same_v;
+  const auto var = variant.to_variant(detail::Variant_type_traits<T>::vt, flags);
+  if constexpr (is_same_v<D, bool>)
+    return var.to_bool();
+  else if constexpr (is_same_v<D, Date>)
+    return Date{var.to_date()};
+  else if constexpr (is_same_v<D, std::int8_t>)
+    return var.to_int8();
+  else if constexpr (is_same_v<D, std::uint8_t>)
+    return var.to_uint8();
+  else if constexpr (is_same_v<D, std::int16_t>)
+    return var.to_int16();
+  else if constexpr (is_same_v<D, std::uint16_t>)
+    return var.to_uint16();
+  else if constexpr (is_same_v<D, std::int32_t>)
+    return var.to_int32();
+  else if constexpr (is_same_v<D, std::uint32_t>)
+    return var.to_uint32();
+  else if constexpr (is_same_v<D, std::int64_t>)
+    return var.to_int64();
+  else if constexpr (is_same_v<D, std::uint64_t>)
+    return var.to_uint64();
+  else if constexpr (is_same_v<D, float>)
+    return var.to_real32();
+  else if constexpr (is_same_v<D, double>)
+    return var.to_real64();
+  else if constexpr (is_same_v<D, std::string>)
+    return var.to_string_utf8();
+  else if constexpr (is_same_v<D, std::wstring>)
+    return var.to_wstring();
+  else
+    static_assert(false_value<T>);
+}
+
 // -----------------------------------------------------------------------------
 // SAFEARRAY
 // -----------------------------------------------------------------------------
