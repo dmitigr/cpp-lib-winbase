@@ -233,6 +233,14 @@ public:
     return static_cast<VARENUM>(data_.vt);
   }
 
+  Variant to_variant(const VARENUM vt, const USHORT flags = {}) const
+  {
+    Variant result;
+    if (VariantChangeType(&result.data_, &data_, flags, vt) != S_OK)
+      throw std::runtime_error{"cannot convert VARIANT to VARIANT"};
+    return result;
+  }
+
   const BSTR bstr() const
   {
     check(VT_BSTR, "BSTR string");
