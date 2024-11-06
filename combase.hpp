@@ -241,55 +241,55 @@ public:
     return result;
   }
 
-  const BSTR bstr() const
+  const BSTR as_bstr() const
   {
     check(VT_BSTR, "BSTR string");
     return data_.bstrVal;
   }
 
-  std::string to_string_utf8() const
+  std::string as_string_utf8() const
   {
     check(VT_BSTR, "UTF-8 string");
     return com::to_string(data_.bstrVal);
   }
 
-  std::string to_string_acp() const
+  std::string as_string_acp() const
   {
     check(VT_BSTR, "ACP string");
     return com::to_string(data_.bstrVal, CP_ACP);
   }
 
-  std::wstring to_wstring() const
+  std::wstring as_wstring() const
   {
     check(VT_BSTR, "UTF-16 string");
     return com::to_wstring(data_.bstrVal);
   }
 
-  std::int8_t to_int8() const
+  std::int8_t as_int8() const
   {
     check(VT_I1, "int8");
     return data_.cVal;
   }
 
-  std::uint8_t to_uint8() const
+  std::uint8_t as_uint8() const
   {
     check(VT_UI1, "uint8");
     return data_.bVal;
   }
 
-  std::int16_t to_int16() const
+  std::int16_t as_int16() const
   {
     check(VT_I2, "int16");
     return data_.iVal;
   }
 
-  std::uint16_t to_uint16() const
+  std::uint16_t as_uint16() const
   {
     check(VT_UI2, "uint16");
     return data_.uiVal;
   }
 
-  std::int32_t to_int32() const
+  std::int32_t as_int32() const
   {
     if (is(VT_I4))
       return data_.lVal;
@@ -298,7 +298,7 @@ public:
     throw_conversion_error("int32");
   }
 
-  std::uint32_t to_uint32() const
+  std::uint32_t as_uint32() const
   {
     if (is(VT_UI4))
       return data_.ulVal;
@@ -307,58 +307,58 @@ public:
     throw_conversion_error("uint32");
   }
 
-  std::int64_t to_int64() const
+  std::int64_t as_int64() const
   {
     check(VT_I8, "int64");
     return data_.llVal;
   }
 
-  std::uint64_t to_uint64() const
+  std::uint64_t as_uint64() const
   {
     check(VT_UI8, "uint64");
     return data_.ullVal;
   }
 
-  float to_real32() const
+  float as_real32() const
   {
     check(VT_R4, "real32");
     return data_.fltVal;
   }
 
-  double to_real64() const
+  double as_real64() const
   {
     check(VT_R8, "real64");
     return data_.dblVal;
   }
 
-  bool to_bool() const
+  bool as_bool() const
   {
     check(VT_BOOL, "bool");
     return data_.boolVal == VARIANT_TRUE;
   }
 
-  DATE to_date() const
+  DATE as_date() const
   {
     check(VT_DATE, "DATE");
     return data_.date;
   }
 
-  const PVOID to_pvoid() const
+  const PVOID as_pvoid() const
   {
     check(VT_BYREF, "PVOID");
     return data_.byref;
   }
 
-  PVOID to_pvoid()
+  PVOID as_pvoid()
   {
     static_assert(!IsConst);
     check(VT_BYREF, "PVOID");
     return data_.byref;
   }
 
-  Const_safe_array_view to_array() const;
+  Const_safe_array_view as_array() const;
 
-  Safe_array_view to_array();
+  Safe_array_view as_array();
 
   const VARIANT& data() const noexcept
   {
@@ -465,33 +465,33 @@ T to(const Basic_variant<IsConst, IsOwns>& variant, const USHORT flags = {})
   using std::is_same_v;
   const auto var = variant.to_variant(detail::Variant_type_traits<T>::vt, flags);
   if constexpr (is_same_v<D, bool>)
-    return var.to_bool();
+    return var.as_bool();
   else if constexpr (is_same_v<D, Date>)
-    return Date{var.to_date()};
+    return Date{var.as_date()};
   else if constexpr (is_same_v<D, std::int8_t>)
-    return var.to_int8();
+    return var.as_int8();
   else if constexpr (is_same_v<D, std::uint8_t>)
-    return var.to_uint8();
+    return var.as_uint8();
   else if constexpr (is_same_v<D, std::int16_t>)
-    return var.to_int16();
+    return var.as_int16();
   else if constexpr (is_same_v<D, std::uint16_t>)
-    return var.to_uint16();
+    return var.as_uint16();
   else if constexpr (is_same_v<D, std::int32_t>)
-    return var.to_int32();
+    return var.as_int32();
   else if constexpr (is_same_v<D, std::uint32_t>)
-    return var.to_uint32();
+    return var.as_uint32();
   else if constexpr (is_same_v<D, std::int64_t>)
-    return var.to_int64();
+    return var.as_int64();
   else if constexpr (is_same_v<D, std::uint64_t>)
-    return var.to_uint64();
+    return var.as_uint64();
   else if constexpr (is_same_v<D, float>)
-    return var.to_real32();
+    return var.as_real32();
   else if constexpr (is_same_v<D, double>)
-    return var.to_real64();
+    return var.as_real64();
   else if constexpr (is_same_v<D, std::string>)
-    return var.to_string_utf8();
+    return var.as_string_utf8();
   else if constexpr (is_same_v<D, std::wstring>)
-    return var.to_wstring();
+    return var.as_wstring();
   else
     static_assert(false_value<T>);
 }
@@ -851,14 +851,14 @@ private:
 // -----------------------------------------------------------------------------
 
 template<bool IsConst, bool IsOwns>
-Const_safe_array_view Basic_variant<IsConst, IsOwns>::to_array() const
+Const_safe_array_view Basic_variant<IsConst, IsOwns>::as_array() const
 {
   check(VT_ARRAY, "SAFEARRAY");
   return Const_safe_array_view{data_.parray};
 }
 
 template<bool IsConst, bool IsOwns>
-Safe_array_view Basic_variant<IsConst, IsOwns>::to_array()
+Safe_array_view Basic_variant<IsConst, IsOwns>::as_array()
 {
   static_assert(!IsConst);
   check(VT_ARRAY, "SAFEARRAY");
