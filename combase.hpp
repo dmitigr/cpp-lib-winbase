@@ -152,6 +152,11 @@ inline std::string to_string(const BSTR bstr, const UINT code_page = CP_UTF8)
 // SAFEARRAY
 // -----------------------------------------------------------------------------
 
+struct Date final {
+  DATE value{};
+};
+static_assert(sizeof(Date) == sizeof(DATE));
+
 namespace detail {
 template<typename> struct Variant_type_traits final {
   static_assert(false, "not specialized");
@@ -179,6 +184,25 @@ template<> struct Variant_type_traits<std::int64_t> final {
 };
 template<> struct Variant_type_traits<std::uint64_t> final {
   static constexpr const VARENUM vt{VT_UI8};
+};
+template<> struct Variant_type_traits<float> final {
+  static constexpr const VARENUM vt{VT_R4};
+};
+template<> struct Variant_type_traits<double> final {
+  static constexpr const VARENUM vt{VT_R8};
+};
+template<> struct Variant_type_traits<bool> final {
+  static constexpr const VARENUM vt{VT_BOOL};
+};
+template<> struct Variant_type_traits<Date> final {
+  static constexpr const VARENUM vt{VT_DATE};
+};
+template<> struct Variant_type_traits<PVOID> final {
+  static constexpr const VARENUM vt{VT_BYREF};
+};
+template<typename Ch, class Tr, class Al>
+struct Variant_type_traits<std::basic_string<Ch, Tr, Al>> final {
+  static constexpr const VARENUM vt{VT_BSTR};
 };
 } // namespace detail
 
@@ -318,7 +342,7 @@ public:
         feat = FADF_DISPATCH;
       } else if constexpr (is_same_v<D, VARIANT>) {
         feat = FADF_VARIANT;
-      } else if constexpr (std::is_arithmetic_v<D>) {
+      } else if constexpr (is_same_v<D, Date> || std::is_arithmetic_v<D>) {
         feat = FADF_HAVEVARTYPE;
         VARTYPE vt{};
         if (FAILED(SafeArrayGetVartype(self_.data_, &vt)))
