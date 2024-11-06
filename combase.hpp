@@ -149,403 +149,6 @@ inline std::string to_string(const BSTR bstr, const UINT code_page = CP_UTF8)
 }
 
 // -----------------------------------------------------------------------------
-// SAFEARRAY
-// -----------------------------------------------------------------------------
-
-struct Date final {
-  DATE value{};
-};
-static_assert(sizeof(Date) == sizeof(DATE));
-
-namespace detail {
-template<typename> struct Variant_type_traits final {
-  static_assert(false, "not specialized");
-};
-template<> struct Variant_type_traits<std::int8_t> final {
-  static constexpr const VARENUM vt{VT_I1};
-};
-template<> struct Variant_type_traits<std::uint8_t> final {
-  static constexpr const VARENUM vt{VT_UI1};
-};
-template<> struct Variant_type_traits<std::int16_t> final {
-  static constexpr const VARENUM vt{VT_I2};
-};
-template<> struct Variant_type_traits<std::uint16_t> final {
-  static constexpr const VARENUM vt{VT_UI2};
-};
-template<> struct Variant_type_traits<std::int32_t> final {
-  static constexpr const VARENUM vt{VT_I4};
-};
-template<> struct Variant_type_traits<std::uint32_t> final {
-  static constexpr const VARENUM vt{VT_UI4};
-};
-template<> struct Variant_type_traits<std::int64_t> final {
-  static constexpr const VARENUM vt{VT_I8};
-};
-template<> struct Variant_type_traits<std::uint64_t> final {
-  static constexpr const VARENUM vt{VT_UI8};
-};
-template<> struct Variant_type_traits<float> final {
-  static constexpr const VARENUM vt{VT_R4};
-};
-template<> struct Variant_type_traits<double> final {
-  static constexpr const VARENUM vt{VT_R8};
-};
-template<> struct Variant_type_traits<bool> final {
-  static constexpr const VARENUM vt{VT_BOOL};
-};
-template<> struct Variant_type_traits<Date> final {
-  static constexpr const VARENUM vt{VT_DATE};
-};
-template<> struct Variant_type_traits<PVOID> final {
-  static constexpr const VARENUM vt{VT_BYREF};
-};
-template<typename Ch, class Tr, class Al>
-struct Variant_type_traits<std::basic_string<Ch, Tr, Al>> final {
-  static constexpr const VARENUM vt{VT_BSTR};
-};
-} // namespace detail
-
-/// A wrapper around SAFEARRAY.
-template<bool IsConst, bool IsOwns>
-class Basic_safe_array final {
-public:
-  static constexpr const bool is_const{IsConst};
-  static constexpr const bool is_owns{IsOwns};
-
-  /// Destroys the underlying data if `IsOwns`.
-  ~Basic_safe_array()
-  {
-    if (IsOwns)
-      SafeArrayDestroy(data_);
-  }
-
-  /// Constructs an empty instance.
-  Basic_safe_array() = default;
-
-  /**
-   * @brief Constructs an array of elements of the specified type.
-   *
-   * @param vt The array elements type.
-   * @param rgsa The bounds of each dimension of the array.
-   */
-  Basic_safe_array(const VARTYPE vt, std::vector<SAFEARRAYBOUND> rgsa)
-    : data_{SafeArrayCreate(vt, rgsa.size(), rgsa.data())}
-  {
-    if (!data_)
-      throw std::runtime_error{"cannot create Safe_array"};
-  }
-
-  /**
-   * @brief Constructs an array.
-   *
-   * @param data The existing array.
-   */
-  explicit Basic_safe_array(SAFEARRAY* const data)
-    : data_{data}
-  {}
-
-  template<bool IsRhsConst, bool IsRhsOwns,
-    typename = std::enable_if_t<IsOwns && !IsRhsOwns>>
-  explicit Basic_safe_array(const Basic_safe_array<IsRhsConst, !IsRhsOwns>& rhs)
-  {
-    copy_from(rhs);
-  }
-
-  /// Copies the instance.
-  template<bool IsRhsConst, bool IsRhsOwns,
-    typename = std::enable_if_t<IsOwns == IsRhsOwns || !IsOwns && IsRhsOwns>>
-  Basic_safe_array(const Basic_safe_array& rhs)
-  {
-    static_assert(IsOwns || IsConst || !IsRhsConst);
-    if constexpr (IsOwns)
-      copy_from(rhs);
-    else
-      data_ = rhs.data_;
-  }
-
-  /// Copy-assignable.
-  template<bool IsRhsConst, bool IsRhsOwns,
-    typename = std::enable_if_t<IsOwns == IsRhsOwns || !IsOwns && IsRhsOwns>>
-  Basic_safe_array& operator=(const Basic_safe_array<IsRhsConst, IsRhsOwns>& rhs)
-  {
-    Basic_safe_array tmp{rhs};
-    swap(tmp);
-    return *this;
-  }
-
-  /// Move-constructible.
-  template<bool IsRhsConst, bool IsRhsOwns,
-    typename = std::enable_if_t<IsOwns == IsRhsOwns>>
-  Basic_safe_array(Basic_safe_array&& rhs) noexcept
-    : data_{rhs.data_}
-  {
-    static_assert(IsConst || !IsRhsConst);
-    rhs.data_ = {};
-  }
-
-  /// Move-assignable.
-  template<bool IsRhsConst, bool IsRhsOwns,
-    typename = std::enable_if_t<IsOwns == IsRhsOwns>>
-  Basic_safe_array& operator=(Basic_safe_array&& rhs) noexcept
-  {
-    Basic_safe_array tmp{std::move(rhs)};
-    swap(tmp);
-    return *this;
-  }
-
-  /// Swaps this instance with `rhs`.
-  void swap(Basic_safe_array& rhs) noexcept
-  {
-    using std::swap;
-    swap(data_, rhs.data_);
-  }
-
-  // Forward declaration of an array slice.
-  template<bool IsConst> class Basic_slice;
-
-  /// A modifiable slice.
-  using Slice = Basic_slice<false>;
-
-  /// A const slice.
-  using Const_slice = Basic_slice<true>;
-
-  /// An array slice.
-  template<bool IsConst>
-  class Basic_slice final : Noncopymove {
-  public:
-    /// Decrements the lock count of the array.
-    ~Basic_slice()
-    {
-      if (self_.data_)
-        SafeArrayUnlock(self_.data_);
-    }
-
-    /**
-     * @tparam Can be `BSTR`, `IUnknown`, `IDispatch` and `VARIANT`.
-     *
-     * @returns The pointer to the first element of the underlying part of array
-     * which is represented by this slice.
-     */
-    template<typename T>
-    const T* array() const
-    {
-      using std::is_same_v;
-      using D = std::decay_t<T>;
-      USHORT feat{};
-      const char* msg{};
-      if constexpr (is_same_v<D, BSTR>) {
-        feat = FADF_BSTR;
-      } else if constexpr (is_same_v<D, IUnknown>) {
-        feat = FADF_UNKNOWN;
-      } else if constexpr (is_same_v<D, IDispatch>) {
-        feat = FADF_DISPATCH;
-      } else if constexpr (is_same_v<D, VARIANT>) {
-        feat = FADF_VARIANT;
-      } else if constexpr (is_same_v<D, Date> || std::is_arithmetic_v<D>) {
-        feat = FADF_HAVEVARTYPE;
-        VARTYPE vt{};
-        if (FAILED(SafeArrayGetVartype(self_.data_, &vt)))
-          throw std::runtime_error{"cannot get VARTYPE of SAFEARRAY"};
-        else if (detail::Variant_type_traits<D>::vt != vt)
-          throw std::runtime_error{"cannot get array of requested type"};
-      } else
-        static_assert(false_value<T>);
-      if (!bool(self_.features() & feat))
-        throw std::runtime_error{"cannot get array of requested type"};
-      return static_cast<const T*>(self_.data().pvData) + absolute_offset_;
-    }
-
-    /// @overload
-    template<typename T>
-    T* array()
-    {
-      static_assert(!IsConst);
-      return const_cast<T*>(static_cast<const Basic_slice*>(this)->array<T>());
-    }
-
-    /// @returns An instance of Variant at the specified `index`.
-    Const_variant_view variant(const std::size_t index) const;
-
-    /// @overload
-    Variant_view variant(const std::size_t index);
-
-    /// @returns The dimension of this slice.
-    USHORT dimension() const noexcept
-    {
-      return dim_;
-    }
-
-    /// @returns The size of this slice.
-    std::size_t size() const noexcept
-    {
-      return size_;
-    }
-
-    /// @returns The lower bound of this slice.
-    LONG lower_bound() const
-    {
-      return self_.data().rgsabound[dim_].lLbound;
-    }
-
-    /// @returns `true` if this slice represents a vector.
-    bool is_vector() const
-    {
-      return dimension() == self_.dimension_count() - 1;
-    }
-
-    /// @returns The slice count.
-    std::size_t slice_count() const
-    {
-      return !is_vector() * self_.data().rgsabound[dim_].cElements;
-    }
-
-    /**
-     * @param index Zero-based slice index.
-     *
-     * @returns The specified slice.
-     */
-    Const_slice slice(const std::size_t index) const
-    {
-      return make_slice<Const_slice>(index);
-    }
-
-    /// @overload
-    Slice slice(const std::size_t index)
-    {
-      static_assert(!IsConst);
-      return make_slice<Slice>(index);
-    }
-
-  private:
-    friend Basic_safe_array;
-
-    const Basic_safe_array& self_;
-    USHORT dim_{};
-    std::size_t absolute_offset_{};
-    std::size_t size_{};
-
-    template<class S>
-    S make_slice(const std::size_t index) const
-    {
-      const auto& data = self_.data();
-      if (!(dim_ + 1 < data.cDims))
-        throw std::invalid_argument{"Safe_array dimension overflow"};
-      else if (!(index < data.rgsabound[dim_].cElements))
-        throw std::invalid_argument{"Safe_array index overflow"};
-      return S{self_, static_cast<USHORT>(dim_ + 1), index, absolute_offset_};
-    }
-
-    /// Increments the lock count of the array.
-    Basic_slice(const Basic_safe_array& self, const USHORT dim,
-      const std::size_t slice_offset,
-      const std::size_t absolute_offset)
-      : self_{self}
-      , dim_{dim}
-    {
-      {
-        const auto err = SafeArrayLock(self.data_);
-        if (FAILED(err))
-          throw std::runtime_error{"cannot create Safe_array::Slice:"
-            " cannot lock SAFEARRAY"};
-      }
-
-      size_ = [&]
-      {
-        std::size_t result{1};
-        const USHORT dcount{self_.dimension_count()};
-        for (USHORT d{dim_}; d < dcount; ++d)
-          result *= self_.data().rgsabound[d].cElements;
-        return result;
-      }();
-      absolute_offset_ = absolute_offset + slice_offset*size_;
-    }
-  };
-
-  /// @returns The dimension count.
-  USHORT dimension_count() const
-  {
-    return data().cDims;
-  }
-
-  /// @returns The feature flags.
-  USHORT features() const
-  {
-    return data().fFeatures;
-  }
-
-  /// @returns The element size.
-  ULONG element_size() const
-  {
-    return data().cbElements;
-  }
-
-  /// @returns The value of lock counter of the underlying data.
-  ULONG lock_count() const
-  {
-    return data().cLocks;
-  }
-
-  /**
-   * @brief Increments the lock count of the underying array.
-   *
-   * @returns The slice of zero dimension.
-   */
-  Const_slice slice() const
-  {
-    return Const_slice{*this, 0, 0, 0};
-  }
-
-  /// @overload
-  Slice slice()
-  {
-    static_assert(!IsConst);
-    return Slice{*this, 0, 0, 0};
-  }
-
-  /// @returns The underlying data.
-  const SAFEARRAY& data() const
-  {
-    if (!data_)
-      throw std::logic_error{"cannot use invalid instance of Safe_array"};
-    return *data_;
-  }
-
-  /// @overload
-  SAFEARRAY& data()
-  {
-    static_assert(!IsConst);
-    return const_cast<SAFEARRAY&>(static_cast<const Basic_safe_array*>(this)->data());
-  }
-
-  /// @returns The underlying data.
-  const SAFEARRAY* data_ptr() const noexcept
-  {
-    return data_;
-  }
-
-  /// @overload
-  SAFEARRAY* data_ptr() noexcept
-  {
-    static_assert(!IsConst);
-    return data_;
-  }
-
-private:
-  SAFEARRAY* data_{};
-
-  void copy_from(Basic_safe_array& rhs)
-  {
-    if (rhs.data_) {
-      const auto err = SafeArrayCopy(rhs.data_, &data_);
-      if (FAILED(err))
-        // FIXME: use wincom::Win_error
-        throw std::runtime_error{"cannot copy Safe_array"};
-    }
-  }
-};
-
-// -----------------------------------------------------------------------------
 // VARIANT
 // -----------------------------------------------------------------------------
 
@@ -745,18 +348,9 @@ public:
     return data_.byref;
   }
 
-  Const_safe_array_view to_array() const
-  {
-    check(VT_ARRAY, "SAFEARRAY");
-    return Const_safe_array_view{data_.parray};
-  }
+  Const_safe_array_view to_array() const;
 
-  Safe_array_view to_array()
-  {
-    static_assert(!IsConst);
-    check(VT_ARRAY, "SAFEARRAY");
-    return Safe_array_view{data_.parray};
-  }
+  Safe_array_view to_array();
 
   const VARIANT& data() const noexcept
   {
@@ -797,21 +391,427 @@ private:
   }
 };
 
-template<bool IsConstArray, bool IsOwnsArray>
-template<bool IsConstSlice>
-Const_variant_view Basic_safe_array<IsConstArray, IsOwnsArray>
-  ::Basic_slice<IsConstSlice>::variant(const std::size_t index) const
+struct Date final {
+  DATE value{};
+};
+static_assert(sizeof(Date) == sizeof(DATE));
+
+namespace detail {
+template<typename> struct Variant_type_traits final {
+  static_assert(false, "not specialized");
+};
+template<> struct Variant_type_traits<std::int8_t> final {
+  static constexpr const VARENUM vt{VT_I1};
+};
+template<> struct Variant_type_traits<std::uint8_t> final {
+  static constexpr const VARENUM vt{VT_UI1};
+};
+template<> struct Variant_type_traits<std::int16_t> final {
+  static constexpr const VARENUM vt{VT_I2};
+};
+template<> struct Variant_type_traits<std::uint16_t> final {
+  static constexpr const VARENUM vt{VT_UI2};
+};
+template<> struct Variant_type_traits<std::int32_t> final {
+  static constexpr const VARENUM vt{VT_I4};
+};
+template<> struct Variant_type_traits<std::uint32_t> final {
+  static constexpr const VARENUM vt{VT_UI4};
+};
+template<> struct Variant_type_traits<std::int64_t> final {
+  static constexpr const VARENUM vt{VT_I8};
+};
+template<> struct Variant_type_traits<std::uint64_t> final {
+  static constexpr const VARENUM vt{VT_UI8};
+};
+template<> struct Variant_type_traits<float> final {
+  static constexpr const VARENUM vt{VT_R4};
+};
+template<> struct Variant_type_traits<double> final {
+  static constexpr const VARENUM vt{VT_R8};
+};
+template<> struct Variant_type_traits<bool> final {
+  static constexpr const VARENUM vt{VT_BOOL};
+};
+template<> struct Variant_type_traits<Date> final {
+  static constexpr const VARENUM vt{VT_DATE};
+};
+template<> struct Variant_type_traits<PVOID> final {
+  static constexpr const VARENUM vt{VT_BYREF};
+};
+template<typename Ch, class Tr, class Al>
+struct Variant_type_traits<std::basic_string<Ch, Tr, Al>> final {
+  static constexpr const VARENUM vt{VT_BSTR};
+};
+} // namespace detail
+
+// -----------------------------------------------------------------------------
+// SAFEARRAY
+// -----------------------------------------------------------------------------
+
+/// A wrapper around SAFEARRAY.
+template<bool IsConst, bool IsOwns>
+class Basic_safe_array final {
+public:
+  static constexpr const bool is_const{IsConst};
+  static constexpr const bool is_owns{IsOwns};
+
+  /// Destroys the underlying data if `IsOwns`.
+  ~Basic_safe_array()
+  {
+    if (IsOwns)
+      SafeArrayDestroy(data_);
+  }
+
+  /// Constructs an empty instance.
+  Basic_safe_array() = default;
+
+  /**
+   * @brief Constructs an array of elements of the specified type.
+   *
+   * @param vt The array elements type.
+   * @param rgsa The bounds of each dimension of the array.
+   */
+  Basic_safe_array(const VARTYPE vt, std::vector<SAFEARRAYBOUND> rgsa)
+    : data_{SafeArrayCreate(vt, rgsa.size(), rgsa.data())}
+  {
+    if (!data_)
+      throw std::runtime_error{"cannot create Safe_array"};
+  }
+
+  /**
+   * @brief Constructs an array.
+   *
+   * @param data The existing array.
+   */
+  explicit Basic_safe_array(SAFEARRAY* const data)
+    : data_{data}
+  {}
+
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns && !IsRhsOwns>>
+  explicit Basic_safe_array(const Basic_safe_array<IsRhsConst, !IsRhsOwns>& rhs)
+  {
+    copy_from(rhs);
+  }
+
+  /// Copies the instance.
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns || !IsOwns && IsRhsOwns>>
+  Basic_safe_array(const Basic_safe_array& rhs)
+  {
+    static_assert(IsOwns || IsConst || !IsRhsConst);
+    if constexpr (IsOwns)
+      copy_from(rhs);
+    else
+      data_ = rhs.data_;
+  }
+
+  /// Copy-assignable.
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns || !IsOwns && IsRhsOwns>>
+  Basic_safe_array& operator=(const Basic_safe_array<IsRhsConst, IsRhsOwns>& rhs)
+  {
+    Basic_safe_array tmp{rhs};
+    swap(tmp);
+    return *this;
+  }
+
+  /// Move-constructible.
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns>>
+  Basic_safe_array(Basic_safe_array&& rhs) noexcept
+    : data_{rhs.data_}
+  {
+    static_assert(IsConst || !IsRhsConst);
+    rhs.data_ = {};
+  }
+
+  /// Move-assignable.
+  template<bool IsRhsConst, bool IsRhsOwns,
+    typename = std::enable_if_t<IsOwns == IsRhsOwns>>
+  Basic_safe_array& operator=(Basic_safe_array&& rhs) noexcept
+  {
+    Basic_safe_array tmp{std::move(rhs)};
+    swap(tmp);
+    return *this;
+  }
+
+  /// Swaps this instance with `rhs`.
+  void swap(Basic_safe_array& rhs) noexcept
+  {
+    using std::swap;
+    swap(data_, rhs.data_);
+  }
+
+  // Forward declaration of an array slice.
+  template<bool IsConst> class Basic_slice;
+
+  /// A modifiable slice.
+  using Slice = Basic_slice<false>;
+
+  /// A const slice.
+  using Const_slice = Basic_slice<true>;
+
+  /// An array slice.
+  template<bool IsConst>
+  class Basic_slice final : Noncopymove {
+  public:
+    /// Decrements the lock count of the array.
+    ~Basic_slice()
+    {
+      if (self_.data_)
+        SafeArrayUnlock(self_.data_);
+    }
+
+    /**
+     * @tparam Can be `BSTR`, `IUnknown`, `IDispatch` and `VARIANT`.
+     *
+     * @returns The pointer to the first element of the underlying part of array
+     * which is represented by this slice.
+     */
+    template<typename T>
+    const T* array() const
+    {
+      using std::is_same_v;
+      using D = std::decay_t<T>;
+      USHORT feat{};
+      const char* msg{};
+      if constexpr (is_same_v<D, BSTR>) {
+        feat = FADF_BSTR;
+      } else if constexpr (is_same_v<D, IUnknown>) {
+        feat = FADF_UNKNOWN;
+      } else if constexpr (is_same_v<D, IDispatch>) {
+        feat = FADF_DISPATCH;
+      } else if constexpr (is_same_v<D, VARIANT>) {
+        feat = FADF_VARIANT;
+      } else if constexpr (is_same_v<D, Date> || std::is_arithmetic_v<D>) {
+        feat = FADF_HAVEVARTYPE;
+        VARTYPE vt{};
+        if (FAILED(SafeArrayGetVartype(self_.data_, &vt)))
+          throw std::runtime_error{"cannot get VARTYPE of SAFEARRAY"};
+        else if (detail::Variant_type_traits<D>::vt != vt)
+          throw std::runtime_error{"cannot get array of requested type"};
+      } else
+        static_assert(false_value<T>);
+      if (!bool(self_.features() & feat))
+        throw std::runtime_error{"cannot get array of requested type"};
+      return static_cast<const T*>(self_.data().pvData) + absolute_offset_;
+    }
+
+    /// @overload
+    template<typename T>
+    T* array()
+    {
+      static_assert(!IsConst);
+      return const_cast<T*>(static_cast<const Basic_slice*>(this)->array<T>());
+    }
+
+    /// @returns An instance of Variant at the specified `index`.
+    Const_variant_view variant(const std::size_t index) const
+    {
+      return Const_variant_view{array<VARIANT>()[index]};
+    }
+
+    /// @overload
+    Variant_view variant(const std::size_t index)
+    {
+      static_assert(!IsConst);
+      return Variant_view{array<VARIANT>()[index]};
+    }
+
+    /// @returns The dimension of this slice.
+    USHORT dimension() const noexcept
+    {
+      return dim_;
+    }
+
+    /// @returns The size of this slice.
+    std::size_t size() const noexcept
+    {
+      return size_;
+    }
+
+    /// @returns The lower bound of this slice.
+    LONG lower_bound() const
+    {
+      return self_.data().rgsabound[dim_].lLbound;
+    }
+
+    /// @returns `true` if this slice represents a vector.
+    bool is_vector() const
+    {
+      return dimension() == self_.dimension_count() - 1;
+    }
+
+    /// @returns The slice count.
+    std::size_t slice_count() const
+    {
+      return !is_vector() * self_.data().rgsabound[dim_].cElements;
+    }
+
+    /**
+     * @param index Zero-based slice index.
+     *
+     * @returns The specified slice.
+     */
+    Const_slice slice(const std::size_t index) const
+    {
+      return make_slice<Const_slice>(index);
+    }
+
+    /// @overload
+    Slice slice(const std::size_t index)
+    {
+      static_assert(!IsConst);
+      return make_slice<Slice>(index);
+    }
+
+  private:
+    friend Basic_safe_array;
+
+    const Basic_safe_array& self_;
+    USHORT dim_{};
+    std::size_t absolute_offset_{};
+    std::size_t size_{};
+
+    template<class S>
+    S make_slice(const std::size_t index) const
+    {
+      const auto& data = self_.data();
+      if (!(dim_ + 1 < data.cDims))
+        throw std::invalid_argument{"Safe_array dimension overflow"};
+      else if (!(index < data.rgsabound[dim_].cElements))
+        throw std::invalid_argument{"Safe_array index overflow"};
+      return S{self_, static_cast<USHORT>(dim_ + 1), index, absolute_offset_};
+    }
+
+    /// Increments the lock count of the array.
+    Basic_slice(const Basic_safe_array& self, const USHORT dim,
+      const std::size_t slice_offset,
+      const std::size_t absolute_offset)
+      : self_{self}
+      , dim_{dim}
+    {
+      {
+        const auto err = SafeArrayLock(self.data_);
+        if (FAILED(err))
+          throw std::runtime_error{"cannot create Safe_array::Slice:"
+            " cannot lock SAFEARRAY"};
+      }
+
+      size_ = [&]
+      {
+        std::size_t result{1};
+        const USHORT dcount{self_.dimension_count()};
+        for (USHORT d{dim_}; d < dcount; ++d)
+          result *= self_.data().rgsabound[d].cElements;
+        return result;
+      }();
+      absolute_offset_ = absolute_offset + slice_offset*size_;
+    }
+  };
+
+  /// @returns The dimension count.
+  USHORT dimension_count() const
+  {
+    return data().cDims;
+  }
+
+  /// @returns The feature flags.
+  USHORT features() const
+  {
+    return data().fFeatures;
+  }
+
+  /// @returns The element size.
+  ULONG element_size() const
+  {
+    return data().cbElements;
+  }
+
+  /// @returns The value of lock counter of the underlying data.
+  ULONG lock_count() const
+  {
+    return data().cLocks;
+  }
+
+  /**
+   * @brief Increments the lock count of the underying array.
+   *
+   * @returns The slice of zero dimension.
+   */
+  Const_slice slice() const
+  {
+    return Const_slice{*this, 0, 0, 0};
+  }
+
+  /// @overload
+  Slice slice()
+  {
+    static_assert(!IsConst);
+    return Slice{*this, 0, 0, 0};
+  }
+
+  /// @returns The underlying data.
+  const SAFEARRAY& data() const
+  {
+    if (!data_)
+      throw std::logic_error{"cannot use invalid instance of Safe_array"};
+    return *data_;
+  }
+
+  /// @overload
+  SAFEARRAY& data()
+  {
+    static_assert(!IsConst);
+    return const_cast<SAFEARRAY&>(static_cast<const Basic_safe_array*>(this)->data());
+  }
+
+  /// @returns The underlying data.
+  const SAFEARRAY* data_ptr() const noexcept
+  {
+    return data_;
+  }
+
+  /// @overload
+  SAFEARRAY* data_ptr() noexcept
+  {
+    static_assert(!IsConst);
+    return data_;
+  }
+
+private:
+  SAFEARRAY* data_{};
+
+  void copy_from(Basic_safe_array& rhs)
+  {
+    if (rhs.data_) {
+      const auto err = SafeArrayCopy(rhs.data_, &data_);
+      if (FAILED(err))
+        // FIXME: use wincom::Win_error
+        throw std::runtime_error{"cannot copy Safe_array"};
+    }
+  }
+};
+
+// -----------------------------------------------------------------------------
+// VARIANT (implementations)
+// -----------------------------------------------------------------------------
+
+template<bool IsConst, bool IsOwns>
+Const_safe_array_view Basic_variant<IsConst, IsOwns>::to_array() const
 {
-  return Const_variant_view{array<VARIANT>()[index]};
+  check(VT_ARRAY, "SAFEARRAY");
+  return Const_safe_array_view{data_.parray};
 }
 
-template<bool IsConstArray, bool IsOwnsArray>
-template<bool IsConstSlice>
-Variant_view Basic_safe_array<IsConstArray, IsOwnsArray>
-  ::Basic_slice<IsConstSlice>::variant(const std::size_t index)
+template<bool IsConst, bool IsOwns>
+Safe_array_view Basic_variant<IsConst, IsOwns>::to_array()
 {
-  static_assert(!IsConstSlice);
-  return Variant_view{array<VARIANT>()[index]};
+  static_assert(!IsConst);
+  check(VT_ARRAY, "SAFEARRAY");
+  return Safe_array_view{data_.parray};
 }
 
 } // namespace dmitigr::winbase::com
