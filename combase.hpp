@@ -649,10 +649,8 @@ public:
         feat = FADF_VARIANT;
       } else if constexpr (is_same_v<D, Date> || std::is_arithmetic_v<D>) {
         feat = FADF_HAVEVARTYPE;
-        VARTYPE vt{};
-        if (FAILED(SafeArrayGetVartype(self_.data_, &vt)))
-          throw std::runtime_error{"cannot get VARTYPE of SAFEARRAY"};
-        else if (detail::Variant_type_traits<D>::vt != vt)
+        const auto vt = self_.vartype();
+        if (detail::Variant_type_traits<D>::vt != vt)
           throw std::runtime_error{"cannot get array of requested type"};
       } else
         static_assert(false_value<T>);
@@ -773,6 +771,15 @@ public:
       absolute_offset_ = absolute_offset + slice_offset*size_;
     }
   };
+
+  /// @returns The VARTYPE stored in the underlying safe array.
+  VARTYPE vartype() const
+  {
+    VARTYPE result{};
+    if (FAILED(SafeArrayGetVartype(data_, &result)))
+      throw std::runtime_error{"cannot get VARTYPE of SAFEARRAY"};
+    return result;
+  }
 
   /// @returns The dimension count.
   USHORT dimension_count() const
