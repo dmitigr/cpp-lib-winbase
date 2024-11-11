@@ -345,14 +345,14 @@ public:
 
   const PVOID as_pvoid() const
   {
-    check(VT_BYREF, "PVOID");
+    check_bits(VT_BYREF, "PVOID");
     return data_.byref;
   }
 
   PVOID as_pvoid()
   {
     static_assert(!IsConst);
-    check(VT_BYREF, "PVOID");
+    check_bits(VT_BYREF, "PVOID");
     return data_.byref;
   }
 
@@ -387,6 +387,11 @@ private:
     return data_.vt == tp;
   }
 
+  bool has(const VARENUM tp) const noexcept
+  {
+    return bool(data_.vt & tp);
+  }
+
   [[noreturn]] static void throw_conversion_error(const std::string& tpnm)
   {
     throw std::logic_error{"cannot convert Variant to "+tpnm};
@@ -395,6 +400,12 @@ private:
   void check(const VARENUM tp, const std::string& tpnm) const
   {
     if (!is(tp))
+      throw_conversion_error(tpnm);
+  }
+
+  void check_bits(const VARENUM tp, const std::string& tpnm) const
+  {
+    if (!has(tp))
       throw_conversion_error(tpnm);
   }
 };
@@ -853,7 +864,7 @@ private:
 template<bool IsConst, bool IsOwns>
 Const_safe_array_view Basic_variant<IsConst, IsOwns>::as_array() const
 {
-  check(VT_ARRAY, "SAFEARRAY");
+  check_bits(static_cast<VARENUM>(VT_VECTOR|VT_ARRAY), "SAFEARRAY");
   return Const_safe_array_view{data_.parray};
 }
 
@@ -861,7 +872,7 @@ template<bool IsConst, bool IsOwns>
 Safe_array_view Basic_variant<IsConst, IsOwns>::as_array()
 {
   static_assert(!IsConst);
-  check(VT_ARRAY, "SAFEARRAY");
+  check_bits(static_cast<VARENUM>(VT_VECTOR|VT_ARRAY), "SAFEARRAY");
   return Safe_array_view{data_.parray};
 }
 
