@@ -280,4 +280,12 @@ std::optional<T> value(const HKEY key, LPCWSTR const subkey, LPCWSTR const name)
     static_assert(false_value<T>, "unsupported type specified");
 }
 
+/// @overload
+template<typename T>
+std::optional<T> value(const HKEY key, const std::wstring& subkey,
+  const std::wstring& name)
+{
+  return value<T>(key, subkey.c_str(), name.c_str());
+}
+
 } // namespace dmitigr::winbase::registry
