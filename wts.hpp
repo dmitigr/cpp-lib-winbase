@@ -23,7 +23,11 @@
 #include "exceptions.hpp"
 
 #include <algorithm>
+#include <cstring>
+#include <memory>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 #include <wtsapi32.h>
 
@@ -33,31 +37,34 @@ class Session_info_by_class final : private Noncopy {
 public:
   ~Session_info_by_class()
   {
-    if (value_)
-      WTSFreeMemory(value_);
+    if (data_)
+      WTSFreeMemory(data_);
   }
 
+  Session_info_by_class() = default;
+
   /**
-   * Constructs instance for session information `info_class` for the specified
-   * `session_id` on the specified Remote Desktop Session Host `server`.
+   * Constructs the instance for session information `info_class` for the
+   * specified `session_id` on the specified Remote Desktop Session
+   * Host `server`.
    */
   Session_info_by_class(const HANDLE server, const DWORD session_id,
     const WTS_INFO_CLASS info_class)
     : info_class_{info_class}
   {
     if (!WTSQuerySessionInformationW(server, session_id, info_class,
-        &value_, &value_size_))
-      throw Sys_exception{"cannot query session information"};
+        &data_, &size_in_bytes_))
+      throw Sys_exception{"cannot query RDP session information"};
   }
 
   Session_info_by_class(Session_info_by_class&& rhs) noexcept
-    : info_class_{rhs.info_class_}
-    , value_{rhs.value_}
-    , value_size_{rhs.value_size_}
+    : data_{rhs.data_}
+    , size_in_bytes_{rhs.size_in_bytes_}
+    , info_class_{rhs.info_class_}
   {
+    rhs.data_ = {};
+    rhs.size_in_bytes_ = {};
     rhs.info_class_ = {};
-    rhs.value_ = {};
-    rhs.value_size_ = {};
   }
 
   Session_info_by_class& operator=(Session_info_by_class&& rhs) noexcept
@@ -70,9 +77,9 @@ public:
   void swap(Session_info_by_class& rhs) noexcept
   {
     using std::swap;
+    swap(data_, rhs.data_);
+    swap(size_in_bytes_, rhs.size_in_bytes_);
     swap(info_class_, rhs.info_class_);
-    swap(value_, rhs.value_);
-    swap(value_size_, rhs.value_size_);
   }
 
   WTS_INFO_CLASS info_class() const noexcept
@@ -80,36 +87,39 @@ public:
     return info_class_;
   }
 
-  LPCWSTR value() const noexcept
+  LPCWSTR data() const noexcept
   {
-    return value_;
+    return data_;
   }
 
   std::size_t size_in_bytes() const noexcept
   {
-    return value_size_;
+    return size_in_bytes_;
   }
 
-  std::size_t size_in_chars() const noexcept
+  template<typename T>
+  T to() const
   {
-    using Ch = std::wstring_view::value_type;
-    return value_size_ >= sizeof(Ch) ? value_size_/sizeof(Ch) - 1 : 0;
-  }
-
-  std::string_view to_string_view() const noexcept
-  {
-    return {reinterpret_cast<LPCSTR>(value()), size_in_bytes()};
-  }
-
-  std::wstring_view to_wstring_view() const noexcept
-  {
-    return {value(), size_in_chars()};
+    using std::is_same_v;
+    using D = std::decay_t<T>;
+    if constexpr (is_same_v<D, std::wstring_view> || is_same_v<D, std::wstring>) {
+      if (!size_in_bytes_ || (size_in_bytes_ % sizeof(wchar_t)))
+        throw std::runtime_error{"cannot convert RDP session information to wide"
+          " string"};
+      return D{data_, size_in_bytes_/sizeof(wchar_t) - 1};
+    } else {
+      D result;
+      if (!(size_in_bytes_ == sizeof(T)))
+        throw std::runtime_error{"cannot convert RDP session information to T"};
+      std::memcpy(std::addressof(result), data_, size_in_bytes_);
+      return result;
+    }
   }
 
 private:
+  LPWSTR data_{};
+  DWORD size_in_bytes_{};
   WTS_INFO_CLASS info_class_{};
-  LPWSTR value_{};
-  DWORD value_size_{};
 };
 
 // -----------------------------------------------------------------------------
@@ -121,6 +131,8 @@ public:
     if (info_)
       WTSFreeMemoryExW(WTSTypeSessionInfoLevel1, info_, info_count_);
   }
+
+  Session_enumeration() = default;
 
   /// Constructs enumeration of sessions on a Remote Desktop Session Host `server`.
   explicit Session_enumeration(const HANDLE server)
