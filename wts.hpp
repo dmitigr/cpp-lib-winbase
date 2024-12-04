@@ -33,6 +33,8 @@
 
 namespace dmitigr::winbase::wts {
 
+constexpr const DWORD invalid_session_id{0xFFFFFFFF};
+
 class Session_info_by_class final : private Noncopy {
 public:
   ~Session_info_by_class()
