@@ -73,6 +73,6 @@ if(DMITIGR_LIBS_TESTS)
   set(CMAKE_CXX_STANDARD 20)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-  set(dmitigr_winbase_tests safearray wts)
+  set(dmitigr_winbase_tests account safearray wts)
   set(dmitigr_winbase_tests_target_link_libraries dmitigr_base)
 endif()
