@@ -18,6 +18,7 @@
 #include "../account.hpp"
 #include "../netman.hpp"
 #include "../security.hpp"
+#include "../strconv.hpp"
 
 #include <iostream>
 
@@ -33,9 +34,26 @@ int main()
 
     const win::Sid rdp_sid{SECURITY_NT_AUTHORITY,
       SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_REMOTE_DESKTOP_USERS};
-    const win::Account rdp_grp{rdp_sid.ptr()};
-    const win::Account dmitigr{L"dmitigr"};
-    win::netman::local_group_add_members(rdp_grp.name(), {dmitigr.sid()});
+    const win::Account grp{rdp_sid.ptr()};
+    const win::Account user{L"dmitigr"};
+    try {
+      win::netman::local_group_add_members(grp.name(), {user.sid()});
+    } catch (const win::Sys_exception& e) {
+      using win::utf16_to_utf8;
+      if (e.code().value() == ERROR_MEMBER_IN_ALIAS)
+        cout<<utf16_to_utf8(user.name())
+            <<" is already in group "
+            <<"\""<<utf16_to_utf8(grp.name())<<"\""<<endl;
+    }
+    try {
+      win::netman::local_group_del_members(grp.name(), {user.sid()});
+    } catch (const win::Sys_exception& e) {
+      using win::utf16_to_utf8;
+      if (e.code().value() == ERROR_MEMBER_NOT_IN_ALIAS)
+        cout<<utf16_to_utf8(user.name())
+            <<" not in group "
+            <<"\""<<utf16_to_utf8(grp.name())<<"\""<<endl;
+    }
   } catch (const std::exception& e) {
     std::clog << "error: " << e.what() << std::endl;
     return 1;

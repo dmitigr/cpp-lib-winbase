@@ -17,6 +17,7 @@
 #include "../../base/assert.hpp"
 #include "../account.hpp"
 #include "../security.hpp"
+#include "../strconv.hpp"
 
 #include <iostream>
 
@@ -32,7 +33,7 @@ int main()
 
     const win::Sid sid{SECURITY_NT_AUTHORITY,
       SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_REMOTE_DESKTOP_USERS};
-    wcout << win::Account{sid.ptr()}.name() << endl;
+    cout << win::utf16_to_utf8(win::Account{sid.ptr()}.name()) << endl;
   } catch (const std::exception& e) {
     std::clog << "error: " << e.what() << std::endl;
     return 1;
