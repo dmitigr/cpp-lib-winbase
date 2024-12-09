@@ -32,6 +32,20 @@
 
 namespace dmitigr::winbase::netman {
 
+namespace detail {
+
+inline std::vector<LOCALGROUP_MEMBERS_INFO_0> to_vector_lgmi0(
+  const std::vector<PSID>& members)
+{
+  std::vector<LOCALGROUP_MEMBERS_INFO_0> result;
+  result.reserve(members.size());
+  for (const auto psid : members)
+    result.emplace_back(psid);
+  return result;
+}
+
+} // namespace detail
+
 template<class Info>
 using Workstation_info = std::unique_ptr<Info, NET_API_STATUS(*)(LPVOID)>;
 
@@ -57,6 +71,8 @@ Workstation_info<Info> workstation_info(const LMSTR server_name = {})
   return Workstation_info<Info>{reinterpret_cast<I*>(buf), &NetApiBufferFree};
 }
 
+// -----------------------------------------------------------------------------
+
 inline void local_group_add_members(const std::wstring& group_name,
   std::vector<LOCALGROUP_MEMBERS_INFO_0> members,
   const std::wstring& server_name = {})
@@ -81,7 +97,34 @@ inline void local_group_add_members(const std::wstring& group_name,
   mmbrs.reserve(members.size());
   for (const auto psid : members)
     mmbrs.emplace_back(psid);
-  local_group_add_members(group_name, std::move(mmbrs), server_name);
+  local_group_add_members(group_name, detail::to_vector_lgmi0(members),
+    server_name);
+}
+
+// -----------------------------------------------------------------------------
+
+inline void local_group_del_members(const std::wstring& group_name,
+  std::vector<LOCALGROUP_MEMBERS_INFO_0> members,
+  const std::wstring& server_name = {})
+{
+  const LPCWSTR server{!server_name.empty() ? server_name.c_str() : nullptr};
+
+  const auto err = NetLocalGroupDelMembers(server, group_name.c_str(),
+    0, reinterpret_cast<LPBYTE>(members.data()), static_cast<DWORD>(members.size()));
+  if (err != NERR_Success) {
+    if (err == NERR_GroupNotFound)
+      throw std::runtime_error{"cannot remove group members: group not found"};
+    else
+      throw Sys_exception{err, "cannot remove group members"};
+  }
+}
+
+inline void local_group_del_members(const std::wstring& group_name,
+  const std::vector<PSID>& members,
+  const std::wstring& server_name = {})
+{
+  local_group_del_members(group_name, detail::to_vector_lgmi0(members),
+    server_name);
 }
 
 } // namespace dmitigr::winbase::netman
