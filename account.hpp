@@ -72,7 +72,7 @@ public:
     const LPCWSTR system{!system_name.empty() ? system_name.c_str() : nullptr};
     DWORD sid_buf_size{};
     DWORD domain_size{};
-    LookupAccountNameW(system, name.c_str(), nullptr, &sid_buf_size,
+    LookupAccountNameW(system, name_.c_str(), nullptr, &sid_buf_size,
       nullptr, &domain_size, nullptr);
     if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
       throw_cannot_create();
