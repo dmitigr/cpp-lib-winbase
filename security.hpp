@@ -17,16 +17,84 @@
 #pragma once
 #pragma comment(lib, "advapi32")
 
-#include "error.hpp"
+#include "exceptions.hpp"
 #include "windows.hpp"
 
+#include <algorithm>
 #include <cassert>
-#include <stdexcept>
+#include <cstddef>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 namespace dmitigr::winbase {
+
+// -----------------------------------------------------------------------------
+// Sid
+// -----------------------------------------------------------------------------
+
+class Sid final : private Noncopy {
+public:
+  ~Sid()
+  {
+    if (ptr_)
+      FreeSid(ptr_);
+  }
+
+  Sid() = default;
+
+  Sid(Sid&& rhs) noexcept
+    : ptr_{rhs.ptr_}
+  {
+    rhs.ptr_ = {};
+  }
+
+  Sid& operator=(Sid&& rhs) noexcept
+  {
+    Sid tmp{std::move(rhs)};
+    swap(tmp);
+    return *this;
+  }
+
+  void swap(Sid& rhs) noexcept
+  {
+    using std::swap;
+    swap(ptr_, rhs.ptr_);
+  }
+
+  template<typename ... S>
+  Sid(SID_IDENTIFIER_AUTHORITY authority, const S ... sub_authorities)
+  {
+    constexpr const auto sub_auth_sz = sizeof...(sub_authorities);
+    static_assert(sub_auth_sz <= 8);
+    std::tuple<PSID_IDENTIFIER_AUTHORITY, BYTE,
+      DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, PSID*> args{};
+    std::get<0>(args) = &authority;
+    std::get<1>(args) = static_cast<BYTE>(sub_auth_sz);
+    fill_subs(args, std::make_index_sequence<sub_auth_sz>{},
+      std::forward<const DWORD>(sub_authorities)...);
+    std::get<10>(args) = &ptr_;
+    if (!std::apply(AllocateAndInitializeSid, args))
+      throw Sys_exception{"cannot create Sid instance"};
+  }
+
+  const PSID ptr() const noexcept
+  {
+    return ptr_;
+  }
+
+private:
+  PSID ptr_{};
+
+  template<class Tuple, std::size_t ... I, typename ... S>
+  void fill_subs(Tuple& args, std::index_sequence<I...> seq,
+    const S ... sub_authorities)
+  {
+    static_assert(sizeof...(sub_authorities) == seq.size());
+    ((std::get<I + 2>(args) = sub_authorities), ...);
+  }
+};
 
 class Token_info final {
 public:
@@ -39,16 +107,18 @@ public:
 
   void reset(const HANDLE token, const TOKEN_INFORMATION_CLASS type)
   {
+    constexpr const char* const errmsg{"cannot reset Token_info"};
     DWORD sz{};
     GetTokenInformation(token, type, nullptr, 0, &sz);
     if (!(sz > 0)) {
       if (const auto err = GetLastError())
-        throw std::runtime_error{system_message(err)};
+        throw Sys_exception{err, errmsg};
     }
 
     buf_.resize(sz);
-    if (!GetTokenInformation(token, type, buf_.data(), buf_.size(), &sz))
-      throw std::runtime_error{last_error_message()};
+    if (!GetTokenInformation(token, type, buf_.data(),
+        static_cast<DWORD>(buf_.size()), &sz))
+      throw Sys_exception{errmsg};
 
     type_ = type;
   }
@@ -80,9 +150,9 @@ public:
     return const_cast<void*>(static_cast<const Token_info*>(this)->bytes());
   }
 
-  std::size_t size() const noexcept
+  DWORD size() const noexcept
   {
-    return buf_.size();
+    return static_cast<DWORD>(buf_.size());
   }
 
 private:
@@ -103,7 +173,7 @@ inline LUID lookup_privilege_value(const std::wstring& privilege_name,
   if (!LookupPrivilegeValueW(
       system_name.empty() ? nullptr : system_name.c_str(),
       privilege_name.c_str(), &result))
-    throw std::runtime_error{last_error_message()};
+    throw Sys_exception{"cannot lookup privilege value"};
   return result;
 }
 
@@ -123,7 +193,7 @@ inline std::wstring lookup_privilege_name(LUID luid,
       if (const DWORD err{GetLastError()}; err == ERROR_INSUFFICIENT_BUFFER)
         result.resize(sz - 1);
       else
-        throw std::runtime_error{system_message(err)};
+        throw Sys_exception{err, "cannot lookup privilege name"};
     } else {
       result.resize(sz);
       break;
@@ -232,7 +302,7 @@ adjust_token_privileges(const HANDLE token,
   if (!AdjustTokenPrivileges(token, disable_all_privileges,
       const_cast<TOKEN_PRIVILEGES*>(new_state.data()), new_state.size_in_bytes(),
       prev_state.data(), &prev_state_size_in_bytes))
-    throw std::runtime_error{last_error_message()};
+    throw Sys_exception{"cannot adjust token privileges"};
   prev_state.resize(prev_state.data()->PrivilegeCount);
   assert(prev_state.size_in_bytes() <= prev_state_size_in_bytes);
   return std::make_pair(std::move(prev_state), GetLastError());
@@ -243,7 +313,7 @@ inline void set_token_information(const HANDLE token, const Token_info& info)
 {
   if (!SetTokenInformation(token, info.type(),
       const_cast<void*>(info.bytes()), info.size()))
-    throw std::runtime_error{last_error_message()};
+    throw Sys_exception{"cannot set token information"};
 }
 
 /// @overload
@@ -251,7 +321,7 @@ inline void set_token_information(const HANDLE token,
   const TOKEN_INFORMATION_CLASS type, DWORD value)
 {
   if (!SetTokenInformation(token, type, &value, sizeof(value)))
-    throw std::runtime_error{last_error_message()};
+    throw Sys_exception{"cannot set token information"};
 }
 
 } // namespace dmitigr::winbase

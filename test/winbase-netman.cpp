@@ -16,6 +16,7 @@
 
 #include "../../base/assert.hpp"
 #include "../account.hpp"
+#include "../netman.hpp"
 #include "../security.hpp"
 
 #include <iostream>
@@ -30,9 +31,11 @@ int main()
     using std::endl;
     namespace win = dmitigr::winbase;
 
-    const win::Sid sid{SECURITY_NT_AUTHORITY,
+    const win::Sid rdp_sid{SECURITY_NT_AUTHORITY,
       SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_REMOTE_DESKTOP_USERS};
-    wcout << win::Account{sid.ptr()}.name() << endl;
+    const win::Account rdp_grp{rdp_sid.ptr()};
+    const win::Account dmitigr{L"dmitigr"};
+    win::netman::local_group_add_members(rdp_grp.name(), {dmitigr.sid()});
   } catch (const std::exception& e) {
     std::clog << "error: " << e.what() << std::endl;
     return 1;

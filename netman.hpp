@@ -23,7 +23,10 @@
 #include "exceptions.hpp"
 
 #include <memory>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 #include <Lm.h>
 
@@ -52,6 +55,33 @@ Workstation_info<Info> workstation_info(const LMSTR server_name = {})
   if (const auto e = NetWkstaGetInfo(server_name, level, &buf); e != NERR_Success)
     throw Sys_exception{e, "cannot get workstation network information"};
   return Workstation_info<Info>{reinterpret_cast<I*>(buf), &NetApiBufferFree};
+}
+
+inline void local_group_add_members(const std::wstring& group_name,
+  std::vector<LOCALGROUP_MEMBERS_INFO_0> members,
+  const std::wstring& server_name = {})
+{
+  const LPCWSTR server{!server_name.empty() ? server_name.c_str() : nullptr};
+
+  const auto err = NetLocalGroupAddMembers(server, group_name.c_str(),
+    0, reinterpret_cast<LPBYTE>(members.data()), static_cast<DWORD>(members.size()));
+  if (err != NERR_Success) {
+    if (err == NERR_GroupNotFound)
+      throw std::runtime_error{"cannot add group members: group not found"};
+    else
+      throw Sys_exception{err, "cannot add group members"};
+  }
+}
+
+inline void local_group_add_members(const std::wstring& group_name,
+  const std::vector<PSID>& members,
+  const std::wstring& server_name = {})
+{
+  std::vector<LOCALGROUP_MEMBERS_INFO_0> mmbrs;
+  mmbrs.reserve(members.size());
+  for (const auto psid : members)
+    mmbrs.emplace_back(psid);
+  local_group_add_members(group_name, std::move(mmbrs), server_name);
 }
 
 } // namespace dmitigr::winbase::netman
