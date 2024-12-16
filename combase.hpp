@@ -241,6 +241,16 @@ public:
     return result;
   }
 
+  bool is_empty() const noexcept
+  {
+    return is(VT_EMPTY);
+  }
+
+  bool is_null() const noexcept
+  {
+    return is(VT_NULL);
+  }
+
   const BSTR as_bstr() const
   {
     check(VT_BSTR, "BSTR string");
