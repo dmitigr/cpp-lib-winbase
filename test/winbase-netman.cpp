@@ -26,12 +26,13 @@
 
 int main()
 {
-  try {
-    using std::cout;
-    using std::wcout;
-    using std::endl;
-    namespace win = dmitigr::winbase;
+  using std::cout;
+  using std::clog;
+  using std::wcout;
+  using std::endl;
+  namespace win = dmitigr::winbase;
 
+  try {
     const win::Sid rdp_sid{SECURITY_NT_AUTHORITY,
       SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_REMOTE_DESKTOP_USERS};
     const win::Account grp{rdp_sid.ptr()};
@@ -54,11 +55,14 @@ int main()
             <<" not in group "
             <<"\""<<utf16_to_utf8(grp.name())<<"\""<<endl;
     }
+  } catch (const win::Sys_exception& e) {
+    const auto code = e.code().value();
+    clog << "error "<<code<<": " << e.what() << endl;
   } catch (const std::exception& e) {
-    std::clog << "error: " << e.what() << std::endl;
+    clog << "error: " << e.what() << endl;
     return 1;
   } catch (...) {
-    std::clog << "unknown error" << std::endl;
+    clog << "unknown error" << endl;
     return 2;
   }
 }

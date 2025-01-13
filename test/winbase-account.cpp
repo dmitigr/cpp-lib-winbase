@@ -25,20 +25,24 @@
 
 int main()
 {
-  try {
-    using std::cout;
-    using std::wcout;
-    using std::endl;
-    namespace win = dmitigr::winbase;
+  using std::cout;
+  using std::clog;
+  using std::wcout;
+  using std::endl;
+  namespace win = dmitigr::winbase;
 
+  try {
     const win::Sid sid{SECURITY_NT_AUTHORITY,
-      SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_REMOTE_DESKTOP_USERS};
+      SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_DEFAULT_ACCOUNT};
     cout << win::utf16_to_utf8(win::Account{sid.ptr()}.name()) << endl;
+  } catch (const win::Sys_exception& e) {
+    const auto code = e.code().value();
+    clog << "error "<<code<<": " << e.what() << endl;
   } catch (const std::exception& e) {
-    std::clog << "error: " << e.what() << std::endl;
+    clog << "error: " << e.what() << endl;
     return 1;
   } catch (...) {
-    std::clog << "unknown error" << std::endl;
+    clog << "unknown error" << endl;
     return 2;
   }
 }
