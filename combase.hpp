@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <new>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -384,6 +385,8 @@ public:
 private:
   mutable VARIANT data_{};
 
+  template<bool, bool> friend class Basic_variant;
+
   void copy_from(const Basic_variant& rhs)
   {
     const auto err = VariantCopyInd(&data_, &rhs.data_);
@@ -649,20 +652,15 @@ public:
       using D = std::decay_t<T>;
       USHORT feat{};
       const char* msg{};
-      if constexpr (is_same_v<D, BSTR>) {
+      if constexpr (is_same_v<D, BSTR>)
         feat = FADF_BSTR;
-      } else if constexpr (is_same_v<D, IUnknown>) {
+      else if constexpr (is_same_v<D, IUnknown>)
         feat = FADF_UNKNOWN;
-      } else if constexpr (is_same_v<D, IDispatch>) {
+      else if constexpr (is_same_v<D, IDispatch>)
         feat = FADF_DISPATCH;
-      } else if constexpr (is_same_v<D, VARIANT>) {
-        feat = FADF_VARIANT;
-      } else if constexpr (is_same_v<D, Date> || std::is_arithmetic_v<D>) {
-        feat = FADF_HAVEVARTYPE;
-        const auto vt = self_.vartype();
-        if (detail::Variant_type_traits<D>::vt != vt)
-          throw std::runtime_error{"cannot get array of requested type"};
-      } else
+      else if constexpr (is_same_v<D, VARIANT>)
+        feat = FADF_VARIANT | FADF_HAVEVARTYPE;
+      else
         static_assert(false_value<T>);
       if (!bool(self_.features() & feat))
         throw std::runtime_error{"cannot get array of requested type"};
@@ -783,12 +781,15 @@ public:
   };
 
   /// @returns The VARTYPE stored in the underlying safe array.
-  VARTYPE vartype() const
+  std::optional<VARTYPE> vartype() const
   {
-    VARTYPE result{};
-    if (FAILED(SafeArrayGetVartype(data_, &result)))
-      throw std::runtime_error{"cannot get VARTYPE of SAFEARRAY"};
-    return result;
+    if (bool(features() & FADF_HAVEVARTYPE)) {
+      VARTYPE result{};
+      if (FAILED(SafeArrayGetVartype(data_, &result)))
+        throw std::runtime_error{"cannot get VARTYPE of SAFEARRAY"};
+      return result;
+    } else
+      return std::nullopt;
   }
 
   /// @returns The dimension count.
