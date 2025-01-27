@@ -41,8 +41,8 @@ public:
    * @brief A message handler.
    *
    * @details A handler must determine the type of message. Since the responses
-   * are handler by Messenger, if `message` represents a Response it must be
-   * just created and returned. A `format` represents a `dwData` field of the
+   * are handled by Messenger, if `data` represents a Response it must be just
+   * created and returned. A `format` represents a `dwData` field of the
    * `COPYDATASTRUCT` structure.
    */
   using Handler = std::function<
