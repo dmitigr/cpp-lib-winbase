@@ -36,7 +36,6 @@ set(dmitigr_winbase_headers
   exceptions.hpp
   hguard.hpp
   hlocal.hpp
-  ipc_msg.hpp
   ipc_wm.hpp
   iphelper.hpp
   job.hpp

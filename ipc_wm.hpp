@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "../base/ipc.hpp"
 #include "windows.hpp"
 
 #include <algorithm>
@@ -45,7 +46,7 @@ public:
    * `COPYDATASTRUCT` structure.
    */
   using Handler = std::function<
-    std::unique_ptr<msg::Response>(HWND sender, std::string_view data, int format)>;
+    std::unique_ptr<ipc::Response>(HWND sender, std::string_view data, int format)>;
 
   ~Messenger()
   {
@@ -73,7 +74,7 @@ public:
     instance_ = instance;
     handler_ = [handle = std::move(handler)](const HWND sender,
       const std::string_view message, const int format)
-        -> std::unique_ptr<dmitigr::winbase::ipc::msg::Response>
+        -> std::unique_ptr<ipc::Response>
       {
         try {
           return handle(sender, message, format);
@@ -151,28 +152,28 @@ public:
     return static_cast<bool>(window_);
   }
 
-  void send(const HWND window, const msg::Response& response)
+  void send(const HWND window, const ipc::Response& response)
   {
     const std::lock_guard lg{mutex_};
     send__(window, response);
   }
 
-  [[nodiscard]] std::future<std::unique_ptr<msg::Response>>
-  send(const HWND window, const msg::Request& request)
+  [[nodiscard]] std::future<std::unique_ptr<ipc::Response>>
+  send(const HWND window, const ipc::Request& request)
   {
     const std::lock_guard lg{mutex_};
     send__(window, request);
     return (pending_responses_[request.id()] = Pending_response{
       std::chrono::steady_clock::now(),
       window,
-      std::promise<std::unique_ptr<msg::Response>>{}}).promise.get_future();
+      std::promise<std::unique_ptr<ipc::Response>>{}}).promise.get_future();
   }
 
 private:
   struct Pending_response final {
     std::chrono::time_point<std::chrono::steady_clock> creation_time;
     HWND responder{};
-    std::promise<std::unique_ptr<msg::Response>> promise;
+    std::promise<std::unique_ptr<ipc::Response>> promise;
   };
 
   Handler handler_;
@@ -235,9 +236,9 @@ private:
              * We can't assert it because we can get the pending response too late -
              * after the promise is removed from self->pending_responses_ by WM_TIMER.
              */
-            if (const auto* const error = dynamic_cast<msg::Error*>(response.get())) {
+            if (const auto* const error = dynamic_cast<ipc::Error*>(response.get())) {
               try {
-                error->throw_this();
+                error->throw_from_this();
               } catch (...) {
                 try {
                   it->second.promise.set_exception(std::current_exception());
@@ -282,7 +283,7 @@ private:
     return 0;
   }
 
-  void send__(const HWND recipient, const msg::Message& message)
+  void send__(const HWND recipient, const ipc::Message& message)
   {
     if (!window_)
       throw std::runtime_error{"cannot send message: ipc::wm::Messenger not running"};
